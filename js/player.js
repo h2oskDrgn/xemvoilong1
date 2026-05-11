@@ -193,7 +193,7 @@ async function loadServerAvailability() {
   const results = await Promise.all(serverIds.map(async server => {
     const slug = PlayerState.serverSlugs[server] || PlayerState.slug;
     if (!slug) return [server, { available: false, playable: false, slug: '', movie: null }];
-    const movie = await API.getDetailFromServer(server, slug);
+    const movie = await API.getDetailFromServer(server, slug, { quiet: true });
     if (!movie) return [server, { available: false, playable: false, slug, movie: null }];
     PlayerState.serverSlugs[server] = movie.slug || slug;
     return [server, {

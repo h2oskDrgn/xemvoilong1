@@ -80,7 +80,7 @@ const API = {
     }
   },
 
-  async _fetchFrom(server, path) {
+  async _fetchFrom(server, path, options = {}) {
     const cfg = this._cfgFor(server);
     if (!cfg) return null;
     const url = `${cfg.base}${path}`;
@@ -89,7 +89,7 @@ const API = {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
-      console.error('[API] fetch error:', err, url);
+      if (!options.quiet) console.warn('[API] fetch error:', err, url);
       return null;
     }
   },
@@ -239,11 +239,11 @@ const API = {
     return this.getDetailFromServer(this._current, slug);
   },
 
-  async getDetailFromServer(server, slug) {
+  async getDetailFromServer(server, slug, options = {}) {
     const s = server || this._current;
     const cfg = this._cfgFor(s);
     if (!cfg) return null;
-    const data = await this._fetchFrom(s, cfg.endpoints.detail(slug));
+    const data = await this._fetchFrom(s, cfg.endpoints.detail(slug), options);
     if (!data) return null;
 
     if (s === 'nguonc') {
