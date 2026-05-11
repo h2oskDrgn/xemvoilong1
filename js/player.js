@@ -1,5 +1,5 @@
 /* ============================================================
-   XEM VỚI LONG — player.js  (YouTube-style)
+   DRAGONFILM — player.js  (YouTube-style)
    ============================================================ */
 
 const PlayerState = {
@@ -99,7 +99,7 @@ function showError(msg) {
    RENDER MOVIE INFO
    ============================================================ */
 function renderMovieInfo(m) {
-  document.title = `${m.name} - Xem Với Long`;
+  document.title = `${m.name} - DragonFilm`;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('movie-title', m.name || '');

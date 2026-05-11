@@ -1,5 +1,5 @@
 /* ============================================================
-   XEM VỚI LONG - main.js  (homepage logic)
+   DRAGONFILM - main.js  (homepage logic)
    ============================================================ */
 
 // ---- State ----
@@ -445,7 +445,7 @@ function localCategoryLabel(m) {
 }
 
 function heroTitleHtml(name) {
-  const words = String(name || 'Dragon Film').trim().split(/\s+/);
+  const words = String(name || 'DragonFilm').trim().split(/\s+/);
   if (words.length <= 2) return escHtml(words.join(' '));
   const splitAt = Math.ceil(words.length / 2);
   return `${escHtml(words.slice(0, splitAt).join(' '))}<br>${escHtml(words.slice(splitAt).join(' '))}`;
@@ -463,7 +463,7 @@ function updateHeroFromMovies(items) {
     const genreText = m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m);
     const desc = m.omdb?.plot && m.omdb.plot !== 'N/A'
       ? m.omdb.plot
-      : `Đề xuất từ Dragon Film, có trên ${renderSourceBadges(m, HOME_RECOMMEND_SERVERS).replace(/<[^>]+>/g, ' ').trim() || 'SV 1 và SV 3'}.`;
+      : `Đề xuất từ DragonFilm, có trên ${renderSourceBadges(m, HOME_RECOMMEND_SERVERS).replace(/<[^>]+>/g, ' ').trim() || 'SV 1 và SV 3'}.`;
 
     const img = slide.querySelector('.hero-bg');
     if (img && bg) {

@@ -1,18 +1,18 @@
-# 🎬 Xem Với Long
+# 🎬 DragonFilm
 
 > **Phim Hay - Share Ngay** | Website xem phim online miễn phí
 
 ## 🚀 Deploy lên GitHub Pages
 
-1. Tạo repository mới trên GitHub (ví dụ: `xemvoilong`)
+1. Tạo repository mới trên GitHub (ví dụ: `DragonFilm`)
 2. Upload toàn bộ thư mục này lên repo
 3. Vào **Settings → Pages → Source**: chọn branch `main`, thư mục `/root`
-4. Lưu → sau ~1 phút web sẽ live tại: `https://yourusername.github.io/xemvoilong/`
+4. Lưu → sau ~1 phút web sẽ live tại: `https://yourusername.github.io/DragonFilm/`
 
 ## 📁 Cấu Trúc
 
 ```
-xemvoilong/
+DragonFilm/
 ├── index.html          # Trang chủ
 ├── movie.html          # Trang xem phim + player
 ├── history.html        # Lịch sử xem
@@ -25,7 +25,7 @@ xemvoilong/
 │   ├── main.js         # Logic trang chủ
 │   └── player.js       # Logic player
 └── assets/
-    └── logo.png        # Logo Xem Với Long
+    └── logo.png        # Logo DragonFilm
 ```
 
 ## 🌐 Nguồn Phim

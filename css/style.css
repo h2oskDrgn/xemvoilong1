@@ -1,5 +1,5 @@
 /* ============================================================
-   XEM VỚI LONG - Main Stylesheet
+   DRAGONFILM - Main Stylesheet
    Quiet luxury palette - graphite, ivory, champagne
    ============================================================ */
 
@@ -31,7 +31,7 @@
   --font-display: var(--font-ios);
   --font-title: var(--font-ios);
   --font-body: var(--font-ios);
-  --header-h: 64px;
+  --header-h: 82px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -89,10 +89,10 @@ header > * { min-width: 0; }
 
 .logo-wrap { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
 .logo-wrap img {
-  width: 158px;
+  width: 230px;
   height: auto;
-  max-width: 166px;
-  max-height: 52px;
+  max-width: 240px;
+  max-height: 76px;
   object-fit: contain;
   filter: drop-shadow(0 0 8px var(--green-glow));
 }
@@ -786,7 +786,7 @@ footer {
 }
 
 @media (max-width: 768px) {
-  :root { --header-h: 56px; }
+  :root { --header-h: 66px; }
   header { padding: 0 10px; gap: 8px; }
   nav { display: none; }
   .menu-toggle { display: flex; }
@@ -795,7 +795,7 @@ footer {
   .header-search input { font-size: 13px; }
   .header-actions { margin-left: 0; }
   .btn-icon, .user-avatar { width: 34px; height: 34px; }
-  .logo-wrap img { width: 118px; max-width: 122px; max-height: 40px; }
+  .logo-wrap img { width: 150px; max-width: 156px; max-height: 58px; }
   .logo-text { display: none; }
 
   .hero { height: 380px; }
@@ -843,7 +843,7 @@ footer {
 
 @media (max-width: 360px) {
   header { padding: 0 8px; gap: 6px; }
-  .logo-wrap img { width: 96px; max-width: 96px; max-height: 34px; }
+  .logo-wrap img { width: 124px; max-width: 124px; max-height: 48px; }
   .btn-icon, .user-avatar { width: 30px; height: 30px; }
   .header-search { padding: 0 8px; }
   .movie-grid, .loading-grid { grid-template-columns: repeat(2, 1fr); }
