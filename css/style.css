@@ -89,10 +89,10 @@ header > * { min-width: 0; }
 
 .logo-wrap { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
 .logo-wrap img {
-  width: 126px;
+  width: 158px;
   height: auto;
-  max-width: 132px;
-  max-height: 42px;
+  max-width: 166px;
+  max-height: 52px;
   object-fit: contain;
   filter: drop-shadow(0 0 8px var(--green-glow));
 }
@@ -795,7 +795,7 @@ footer {
   .header-search input { font-size: 13px; }
   .header-actions { margin-left: 0; }
   .btn-icon, .user-avatar { width: 34px; height: 34px; }
-  .logo-wrap img { width: 100px; max-width: 104px; max-height: 34px; }
+  .logo-wrap img { width: 118px; max-width: 122px; max-height: 40px; }
   .logo-text { display: none; }
 
   .hero { height: 380px; }
@@ -843,7 +843,7 @@ footer {
 
 @media (max-width: 360px) {
   header { padding: 0 8px; gap: 6px; }
-  .logo-wrap img { width: 84px; max-width: 84px; max-height: 30px; }
+  .logo-wrap img { width: 96px; max-width: 96px; max-height: 34px; }
   .btn-icon, .user-avatar { width: 30px; height: 30px; }
   .header-search { padding: 0 8px; }
   .movie-grid, .loading-grid { grid-template-columns: repeat(2, 1fr); }
