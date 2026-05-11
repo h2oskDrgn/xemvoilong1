@@ -102,6 +102,7 @@ async function loadMovies(resetPage = true) {
   if (state.loading) return;
   state.loading = true;
   if (resetPage) state.page = 1;
+  syncHeroVisibility();
 
   const grid = document.getElementById('movie-grid');
   const pgWrap = document.getElementById('pagination');
@@ -168,6 +169,7 @@ function renderPagination() {
 
 function goPage(p) {
   state.page = p;
+  syncHeroVisibility();
   loadMovies(false);
   window.scrollTo({ top: document.getElementById('movie-grid')?.offsetTop - 80 || 0, behavior: 'smooth' });
 }
@@ -300,10 +302,20 @@ function initHero() {
   let timer = setInterval(() => go(current + 1), 5000);
 }
 
+function syncHeroVisibility() {
+  const hero = document.querySelector('.hero');
+  const movies = document.getElementById('movies');
+  if (!hero) return;
+  const isFilteredView = state.mode !== 'latest';
+  hero.classList.toggle('is-hidden', isFilteredView);
+  movies?.classList.toggle('filtered-view', isFilteredView);
+}
+
 // ---- Main init ----
 document.addEventListener('DOMContentLoaded', () => {
   initFilters();
   initSearch();
   initHero();
+  syncHeroVisibility();
   loadMovies();
 });

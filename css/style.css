@@ -46,6 +46,14 @@ body {
   max-width: 100%;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
+.filtered-view {
+  padding-top: 24px;
+}
+
 /* ---- Scrollbar ---- */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg2); }
