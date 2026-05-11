@@ -66,8 +66,8 @@ body {
 /* ---- Page transition ---- */
 .page-enter { animation: fadeInUp 0.5s var(--transition) both; }
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ============================================================
@@ -563,8 +563,9 @@ main { padding-top: var(--header-h); min-height: 100vh; }
 .modal-overlay {
   display: none; position: fixed; inset: 0; z-index: 2000;
   background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
-  align-items: center; justify-content: center;
-  padding: 20px;
+  align-items: flex-start; justify-content: center;
+  overflow-y: auto;
+  padding: calc(var(--header-h) + 18px) 20px 24px;
 }
 .modal-overlay.open { display: flex; animation: fadeIn 0.2s ease both; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -614,6 +615,90 @@ main { padding-top: var(--header-h); min-height: 100vh; }
 
 .form-error { color: #ff4444; font-size: 13px; margin-top: 4px; display: none; }
 .form-error.show { display: block; }
+
+/* ============================================================
+   GUEST NOTICE POPUP
+   ============================================================ */
+.guest-notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: calc(var(--header-h) + 18px) 18px 24px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+.guest-notice-overlay.open {
+  display: flex;
+  animation: fadeIn 0.2s ease both;
+}
+.guest-notice {
+  position: relative;
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, rgba(25,29,34,0.98), rgba(12,14,17,0.98));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 30px 28px 26px;
+  box-shadow: 0 28px 80px rgba(0,0,0,0.72), 0 0 42px var(--green-glow-sm);
+  animation: modalIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.guest-notice-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+.guest-notice-close:hover { color: var(--white); background: rgba(255,255,255,0.1); }
+.guest-notice-kicker {
+  font-family: var(--font-title);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--green);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.guest-notice h2 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.12;
+  color: var(--white);
+  margin-bottom: 12px;
+}
+.guest-notice p {
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.65;
+  margin-bottom: 22px;
+}
+.guest-notice-action {
+  width: 100%;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  background: var(--green);
+  color: var(--accent-ink);
+  cursor: pointer;
+  font-family: var(--font-title);
+  font-size: 15px;
+  font-weight: 800;
+  padding: 12px 16px;
+  transition: var(--transition);
+}
+.guest-notice-action:hover {
+  background: #e6ca85;
+  box-shadow: 0 0 26px var(--green-glow);
+}
 
 /* ============================================================
    USER DROPDOWN

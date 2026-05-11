@@ -82,6 +82,39 @@ function fmtTime(s) {
   return `${m}:${ss.toString().padStart(2, '0')}`;
 }
 
+// ---- Guest viewing notice ----
+function initGuestNotice() {
+  const key = 'dragonfilm_guest_notice_seen';
+  if (localStorage.getItem(key)) return;
+  if (document.getElementById('guest-notice')) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'guest-notice-overlay';
+  overlay.id = 'guest-notice';
+  overlay.innerHTML = `
+    <div class="guest-notice" role="dialog" aria-modal="true" aria-labelledby="guest-notice-title">
+      <button class="guest-notice-close" type="button" aria-label="Đóng thông báo">×</button>
+      <div class="guest-notice-kicker">DragonFilm</div>
+      <h2 id="guest-notice-title">Xem phim ngay, không cần tài khoản</h2>
+      <p>Bạn có thể chọn phim và xem liền, không cần đăng nhập hay đăng ký. Lịch sử xem cùng thời gian đang xem dở sẽ tự lưu trên thiết bị này để lần sau mở lại tiếp tục.</p>
+      <button class="guest-notice-action" type="button">Đã hiểu</button>
+    </div>`;
+
+  const close = () => {
+    localStorage.setItem(key, '1');
+    overlay.classList.remove('open');
+    setTimeout(() => overlay.remove(), 220);
+  };
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('open'));
+  overlay.querySelector('.guest-notice-close')?.addEventListener('click', close);
+  overlay.querySelector('.guest-notice-action')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+}
+
 // ---- Init header auth UI ----
 function initHeaderAuth() {
   const user = Auth.getUser();
@@ -188,6 +221,7 @@ function initMobileNav() {
 document.addEventListener('DOMContentLoaded', () => {
   initHeaderAuth();
   initModal();
+  initGuestNotice();
   initMobileNav();
   document.body.classList.add('page-enter');
 });

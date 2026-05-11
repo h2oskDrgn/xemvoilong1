@@ -399,7 +399,6 @@ function saveHistoryProgress() {
     ResumeTime.set(resumeKey, seconds);
     ResumeTime.set(PlayerState.slug, seconds);
   }
-  if (!Auth.getUser()) return;
   History.add({
     slug: PlayerState.slug,
     name: PlayerState.movie.name,
