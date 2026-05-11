@@ -164,9 +164,9 @@ function renderEpisodes(episodes) {
       const btn = document.createElement('button');
       btn.className = 'ep-btn';
       btn.textContent = ep.name || `Tập ${ei + 1}`;
-      if (!ep.link_embed) {
+      if (!ep.link_embed && !ep.link_m3u8) {
         btn.disabled = true;
-        btn.title = 'Tập này chưa có player API';
+        btn.title = 'Tập này chưa có player';
       }
       btn.addEventListener('click', () => playEpisode(si, ei, false));
       grid.appendChild(btn);
@@ -179,11 +179,15 @@ function setActiveEpBtn(si, ei) {
   document.getElementById(`ep-grid-${si}`)?.querySelectorAll('.ep-btn')[ei]?.classList.add('active');
 }
 
+function isEpPlayable(ep) {
+  return !!(ep.link_embed || ep.link_m3u8);
+}
+
 function findFirstPlayableEpisode(episodes) {
   if (!Array.isArray(episodes)) return null;
   for (let serverIdx = 0; serverIdx < episodes.length; serverIdx += 1) {
     const items = episodes[serverIdx]?.items || [];
-    const epIdx = items.findIndex(ep => ep.link_embed);
+    const epIdx = items.findIndex(isEpPlayable);
     if (epIdx >= 0) return { serverIdx, epIdx };
   }
   return null;
@@ -304,9 +308,17 @@ function playEpisode(serverIdx, epIdx, shouldResume = false) {
   }
 
   const ep   = srv.items[epIdx];
-  const link = ep.link_embed || '';
+  // Ưu tiên link_embed (iframe), nếu không có thì dùng link_m3u8 (HTML5 player)
+  const embedLink = ep.link_embed || '';
+  const m3u8Link  = ep.link_m3u8  || '';
+  const isM3u8    = !embedLink && !!m3u8Link;
+  // Nếu link_embed thực ra là .m3u8 thì cũng dùng HTML5 player
+  const looksLikeM3u8 = (url) => /\.m3u8(\?|$)/i.test(url);
+  const useM3u8   = isM3u8 || (embedLink && looksLikeM3u8(embedLink));
+  const link      = useM3u8 ? (m3u8Link || embedLink) : embedLink;
+
   if (!link) {
-    showError('Tập này chưa có player API. Hãy thử tập khác hoặc nguồn khác.');
+    showError('Tập này chưa có player. Hãy thử tập khác hoặc nguồn khác.');
     return;
   }
 
@@ -319,14 +331,14 @@ function playEpisode(serverIdx, epIdx, shouldResume = false) {
     epIdx,
   };
   startWatchTracking(shouldResume);
-  buildPlayer(link, true, shouldResume);
+  buildPlayer(link, !useM3u8, shouldResume);
 }
 
 function getRequestedPlayableEpisode(episodes) {
   const serverIdx = PlayerState.requestedEpisodeServer;
   const epIdx = PlayerState.requestedEpisode;
   const ep = episodes?.[serverIdx]?.items?.[epIdx];
-  if (ep?.link_embed) return { serverIdx, epIdx };
+  if (ep && isEpPlayable(ep)) return { serverIdx, epIdx };
   return null;
 }
 
@@ -364,7 +376,7 @@ function saveHistoryProgress() {
     ResumeTime.set(resumeKey, seconds);
     ResumeTime.set(PlayerState.slug, seconds);
   }
-  if (!Auth.getUser()) return;
+  // Lưu lịch sử cho tất cả người dùng (kể cả chưa đăng nhập)
   History.add({
     slug: PlayerState.slug,
     name: PlayerState.movie.name,
