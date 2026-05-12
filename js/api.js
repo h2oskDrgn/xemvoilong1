@@ -59,6 +59,14 @@ const API = {
     cacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   },
 
+  tmdb: {
+    apiKey: 'b3b5d5d4a229be123eb3cafe48dd6f85',
+    base: 'https://api.themoviedb.org/3',
+    imgBase: 'https://image.tmdb.org/t/p',
+    cachePrefix: 'dragonfilm_tmdb_',
+    cacheTtlMs: 6 * 60 * 60 * 1000,
+  },
+
   _current: 'kkphim',
 
   get currentServer() { return this._current; },
@@ -254,6 +262,215 @@ const API = {
     } catch {
       // Ignore storage quota/private mode.
     }
+  },
+
+  _tmdbCacheGet(key) {
+    try {
+      const raw = localStorage.getItem(`${this.tmdb.cachePrefix}${key}`);
+      if (!raw) return undefined;
+      const cached = JSON.parse(raw);
+      if (!cached || Date.now() - cached.ts > this.tmdb.cacheTtlMs) return undefined;
+      return cached.data;
+    } catch {
+      return undefined;
+    }
+  },
+
+  _tmdbCacheSet(key, data) {
+    try {
+      localStorage.setItem(`${this.tmdb.cachePrefix}${key}`, JSON.stringify({ ts: Date.now(), data }));
+    } catch {
+      // Ignore storage quota/private mode.
+    }
+  },
+
+  async _fetchTmdb(path, params = {}) {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const url = new URL(`${this.tmdb.base}${cleanPath}`);
+    url.searchParams.set('api_key', this.tmdb.apiKey);
+    url.searchParams.set('language', params.language || 'vi-VN');
+    url.searchParams.set('region', params.region || 'VN');
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && key !== 'language' && key !== 'region') {
+        url.searchParams.set(key, value);
+      }
+    });
+
+    const cacheKey = `${cleanPath}:${url.searchParams.toString()}`;
+    const cached = this._tmdbCacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+
+    try {
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      this._tmdbCacheSet(cacheKey, data);
+      return data;
+    } catch (err) {
+      console.warn('[TMDB] fetch error:', err);
+      return null;
+    }
+  },
+
+  _tmdbImage(path, size = 'w500') {
+    if (!path) return '';
+    if (String(path).startsWith('http')) return path;
+    return `${this.tmdb.imgBase}/${size}${path}`;
+  },
+
+  _normalizeTmdbMovie(raw) {
+    if (!raw) return null;
+    const title = raw.title || raw.name || '';
+    if (!title) return null;
+    const releaseDate = raw.release_date || raw.first_air_date || '';
+    return {
+      id: raw.id,
+      title,
+      original_title: raw.original_title || raw.original_name || title,
+      overview: raw.overview || '',
+      poster_url: this._tmdbImage(raw.poster_path, 'w500'),
+      backdrop_url: this._tmdbImage(raw.backdrop_path, 'w780'),
+      release_date: releaseDate,
+      year: String(releaseDate || '').slice(0, 4),
+      vote_average: Number(raw.vote_average || 0),
+      vote_count: Number(raw.vote_count || 0),
+      popularity: Number(raw.popularity || 0),
+      media_type: raw.media_type || 'movie',
+      _source: 'tmdb',
+    };
+  },
+
+  _normalizeTmdbDetails(raw) {
+    if (!raw) return null;
+    const base = this._normalizeTmdbMovie(raw);
+    if (!base) return null;
+    return {
+      ...base,
+      runtime: raw.runtime || '',
+      status: raw.status || '',
+      tagline: raw.tagline || '',
+      genres: (raw.genres || []).map(g => ({ id: g.id, name: g.name })).filter(g => g.name),
+      cast: (raw.credits?.cast || [])
+        .filter(person => person?.name)
+        .slice(0, 12)
+        .map(person => ({
+          id: person.id,
+          name: person.name,
+          character: person.character || '',
+          profile_url: this._tmdbImage(person.profile_path, 'w185'),
+        })),
+    };
+  },
+
+  _titleKey(value) {
+    return String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  },
+
+  _scoreTmdbResult(query, year, result) {
+    const target = this._titleKey(query);
+    const candidates = [
+      this._titleKey(result?.title),
+      this._titleKey(result?.original_title),
+    ].filter(Boolean);
+    let score = 0;
+    candidates.forEach(candidate => {
+      if (candidate === target) score = Math.max(score, 100);
+      else if (candidate.includes(target) || target.includes(candidate)) score = Math.max(score, 80);
+      else {
+        const words = target.split(/\s+/).filter(Boolean);
+        const overlap = words.filter(word => candidate.includes(word)).length;
+        score = Math.max(score, overlap * 12);
+      }
+    });
+    const resultYear = String(result?.release_date || '').slice(0, 4);
+    if (year && resultYear === year) score += 18;
+    score += Math.min(8, Number(result?.vote_count || 0) / 1000);
+    score += Math.min(8, Number(result?.popularity || 0) / 20);
+    return score;
+  },
+
+  async getTmdbInfo(movie) {
+    const cacheKey = movie?._source === 'tmdb' && movie.id
+      ? `info:tmdb:${movie.id}`
+      : `info:${this._movieKey(movie || {})}`;
+    const cached = this._tmdbCacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+
+    let detail = null;
+    if (movie?._source === 'tmdb' && movie.id) {
+      detail = await this._fetchTmdb(`/movie/${movie.id}`, { append_to_response: 'credits' });
+    } else {
+      const year = String(movie?.year || '').match(/\d{4}/)?.[0] || '';
+      const titles = this._omdbTitleCandidates(movie);
+      for (const title of titles) {
+        const searches = [];
+        if (year) searches.push(await this._fetchTmdb('/search/movie', { query: title, primary_release_year: year, page: 1, include_adult: false }));
+        searches.push(await this._fetchTmdb('/search/movie', { query: title, page: 1, include_adult: false }));
+        const results = searches.flatMap(data => data?.results || []);
+        const best = results
+          .map(item => ({ item, score: this._scoreTmdbResult(title, year, item) }))
+          .sort((a, b) => b.score - a.score)[0]?.item;
+        if (best?.id) {
+          detail = await this._fetchTmdb(`/movie/${best.id}`, { append_to_response: 'credits' });
+          if (detail) break;
+        }
+      }
+    }
+
+    const normalized = this._normalizeTmdbDetails(detail);
+    this._tmdbCacheSet(cacheKey, normalized);
+    return normalized;
+  },
+
+  async enrichOneWithTmdb(movie) {
+    const tmdb = await this.getTmdbInfo(movie);
+    return {
+      ...movie,
+      tmdb,
+      poster_url: movie?.poster_url || tmdb?.poster_url || '',
+      thumb_url: movie?.thumb_url || movie?.poster_url || tmdb?.backdrop_url || tmdb?.poster_url || '',
+    };
+  },
+
+  async enrichWithTmdb(items, options = {}) {
+    const limit = options.limit || 18;
+    const enriched = await Promise.all((items || []).map((movie, index) => {
+      if (index >= limit) return movie;
+      return this.enrichOneWithTmdb(movie).catch(() => movie);
+    }));
+
+    if (options.sort) {
+      enriched.sort((a, b) => {
+        const scoreA = (a.tmdb?.vote_average || 0) + Math.min(0.5, Math.log10((a.tmdb?.vote_count || 0) + 1) / 10);
+        const scoreB = (b.tmdb?.vote_average || 0) + Math.min(0.5, Math.log10((b.tmdb?.vote_count || 0) + 1) / 10);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'vi');
+      });
+    }
+
+    if (options.rank) {
+      let rank = 1;
+      enriched.forEach(movie => {
+        if (movie.tmdb?.vote_average) movie._rank = rank++;
+        else delete movie._rank;
+      });
+    }
+
+    return enriched;
+  },
+
+  _uniqueTmdbMovies(items) {
+    const map = new Map();
+    (items || []).forEach(item => {
+      if (!item?.id || map.has(item.id)) return;
+      map.set(item.id, item);
+    });
+    return [...map.values()];
   },
 
   _omdbTitleCandidates(movie) {

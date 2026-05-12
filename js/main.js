@@ -90,6 +90,10 @@ function formatOmdbBadge(m) {
   return m.omdb?.ratingValue ? `<span class="rating-chip">IMDb ${escHtml(m.omdb.imdbRating)}</span>` : '';
 }
 
+function formatTmdbBadge(m) {
+  return m.tmdb?.vote_average ? `<span class="rating-chip">TMDB ${m.tmdb.vote_average.toFixed(1)}</span>` : '';
+}
+
 function renderCard(m) {
   const poster = m.poster_url || m.thumb_url || '';
   const ep = m.episode_current || '';
@@ -97,8 +101,10 @@ function renderCard(m) {
   const href = buildMovieHref(m);
   const sourceBadges = renderSourceBadges(m);
   const rankBadge = m._rank ? `<span class="rank-chip">#${m._rank}</span>` : '';
-  const ratingBadge = formatOmdbBadge(m);
+  const ratingBadge = formatTmdbBadge(m) || formatOmdbBadge(m);
+  const tmdbGenre = m.tmdb?.genres?.[0]?.name || '';
   const omdbGenre = m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : '';
+  const genreText = tmdbGenre || omdbGenre;
   const imgEl = poster
     ? `<img src="${escHtml(poster)}" alt="${escHtml(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=movie-poster-placeholder><div>🎬</div><span>${escHtml(m.name)}</span></div>'">`
     : `<div class="movie-poster-placeholder"><div>🎬</div><span>${escHtml(m.name)}</span></div>`;
@@ -117,7 +123,7 @@ function renderCard(m) {
       <div class="movie-sub">
         ${m.year ? `<span>${m.year}</span>` : ''}
         ${m.lang ? `<span class="dot">·</span><span>${escHtml(m.lang)}</span>` : ''}
-        ${omdbGenre ? `<span class="dot">·</span><span>${escHtml(omdbGenre)}</span>` : ''}
+        ${genreText ? `<span class="dot">·</span><span>${escHtml(genreText)}</span>` : ''}
       </div>
       ${sourceBadges ? `<div class="movie-sources">${sourceBadges}</div>` : ''}
     </div>
@@ -147,13 +153,13 @@ function updateSectionTitle() {
   else if (state.mode === 'genre') title.textContent = 'Phim Theo Thể Loại';
   else if (state.mode === 'country') title.textContent = 'Phim Theo Quốc Gia';
   else if (state.mode === 'type') title.textContent = 'Phim Theo Danh Mục';
-  else title.textContent = 'Đề Xuất Theo Xếp Hạng';
+  else title.textContent = 'Đề Xuất Theo TMDB';
 }
 
 function resultInfoText(count) {
-  if (['search', 'genre'].includes(state.mode)) return `${count} phim từ SV 1, SV 2 và SV 3 · kèm điểm OMDb nếu có`;
-  if (state.mode === 'latest') return `${count} phim từ SV 1 và SV 3 · xếp theo IMDb từ OMDb`;
-  return `${count} phim từ SV 1 và SV 3 · ưu tiên điểm OMDb cao`;
+  if (['search', 'genre'].includes(state.mode)) return `${count} phim từ SV 1, SV 2 và SV 3 · kèm thông tin TMDB nếu có`;
+  if (state.mode === 'latest') return `${count} phim từ SV 1 và SV 3 · xếp theo điểm TMDB`;
+  return `${count} phim từ SV 1 và SV 3 · ưu tiên thông tin TMDB`;
 }
 
 // ---- Load movies ----
@@ -190,13 +196,23 @@ async function loadMovies(resetPage = true) {
 
   if (result?.items?.length) {
     try {
-      result.items = await API.enrichWithOmdb(result.items, {
+      result.items = await API.enrichWithTmdb(result.items, {
         limit: state.mode === 'search' ? 12 : 24,
         sort: state.mode !== 'search',
         rank: state.mode !== 'search',
       });
     } catch (e) {
-      console.warn('[OMDb] Không thể xếp hạng danh sách:', e);
+      console.warn('[TMDB] Không thể enrich danh sách:', e);
+    }
+
+    try {
+      result.items = await API.enrichWithOmdb(result.items, {
+        limit: state.mode === 'search' ? 8 : 12,
+        sort: false,
+        rank: false,
+      });
+    } catch (e) {
+      console.warn('[OMDb] Không thể enrich dự phòng:', e);
     }
   }
 
@@ -458,12 +474,12 @@ function updateHeroFromMovies(items) {
   const picks = (items || []).filter(movie => movie?.name).slice(0, slides.length);
   picks.forEach((m, index) => {
     const slide = slides[index];
-    const bg = m.omdb?.poster || m.poster_url || m.thumb_url;
-    const ratingText = m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : 'OMDb';
-    const genreText = m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m);
-    const desc = m.omdb?.plot && m.omdb.plot !== 'N/A'
+    const bg = m.tmdb?.backdrop_url || m.tmdb?.poster_url || m.omdb?.poster || m.poster_url || m.thumb_url;
+    const ratingText = m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : (m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : 'TMDB');
+    const genreText = m.tmdb?.genres?.[0]?.name || (m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m));
+    const desc = m.tmdb?.overview || (m.omdb?.plot && m.omdb.plot !== 'N/A'
       ? m.omdb.plot
-      : `Đề xuất từ DragonFilm, có trên ${renderSourceBadges(m, HOME_RECOMMEND_SERVERS).replace(/<[^>]+>/g, ' ').trim() || 'SV 1 và SV 3'}.`;
+      : `Đề xuất từ DragonFilm, có trên ${renderSourceBadges(m, HOME_RECOMMEND_SERVERS).replace(/<[^>]+>/g, ' ').trim() || 'SV 1 và SV 3'}.`);
 
     const img = slide.querySelector('.hero-bg');
     if (img && bg) {
@@ -471,11 +487,11 @@ function updateHeroFromMovies(items) {
       img.alt = m.name || '';
     }
     const badge = slide.querySelector('.hero-badge');
-    if (badge) badge.textContent = index === 0 ? 'Đề Xuất OMDb' : `Hạng #${m._rank || index + 1}`;
+    if (badge) badge.textContent = index === 0 ? 'Đề Xuất TMDB' : `Hạng #${m._rank || index + 1}`;
     const title = slide.querySelector('.hero-title');
     if (title) title.innerHTML = heroTitleHtml(m.name);
     const year = slide.querySelector('.year');
-    if (year) year.textContent = m.year || m.omdb?.year || '';
+    if (year) year.textContent = m.year || m.tmdb?.year || m.omdb?.year || '';
     const cat = slide.querySelector('.cat');
     if (cat) cat.textContent = genreText || 'Phim';
     const rating = slide.querySelector('.hero-rating');
@@ -485,7 +501,7 @@ function updateHeroFromMovies(items) {
     const actions = slide.querySelector('.hero-actions');
     if (actions) {
       actions.innerHTML = `<a href="${escHtml(buildMovieHref(m, HOME_RECOMMEND_SERVERS))}" class="btn-primary">Xem Ngay</a>
-        <a href="#movies" class="btn-secondary">Bảng Xếp Hạng</a>`;
+        <a href="#movies" class="btn-secondary">Danh Sách Phim</a>`;
     }
   });
 }

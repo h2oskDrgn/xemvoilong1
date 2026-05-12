@@ -7,7 +7,7 @@
   <meta name="description" content="Xem phim online - DragonFilm">
   <link rel="icon" href="assets/logo.png?v=10" type="image/png">
   <link rel="stylesheet" href="css/style.css?v=16">
-  <link rel="stylesheet" href="css/player.css?v=9">
+  <link rel="stylesheet" href="css/player.css?v=11">
 </head>
 <body class="player-page">
 
@@ -71,6 +71,14 @@
     <div id="player-wrap" style="background:#000;max-width:1100px;margin:0 auto">
       <div class="spinner-wrap"><div class="spinner"></div></div>
     </div>
+    <div class="player-next-wrap">
+      <button class="player-next-btn" id="btn-next-episode" type="button" disabled>
+        <span id="next-episode-label">Đang tải tập...</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M13 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
 
     <div class="player-container">
       <div class="movie-detail-wrap">
@@ -84,6 +92,7 @@
             <div class="movie-detail-sub" id="movie-sub"></div>
             <div class="movie-tags" id="movie-tags"></div>
             <p class="movie-desc" id="movie-desc"></p>
+            <div class="movie-cast" id="movie-cast"></div>
           </div>
         </div>
 
@@ -95,12 +104,10 @@
             <button class="server-btn" data-server="ophim" onclick="switchApiServer('ophim',this)">Server 2 · OP</button>
             <button class="server-btn" data-server="nguonc" onclick="switchApiServer('nguonc',this)">Server 3 · NC</button>
           </div>
+          <div class="source-watch-note">
+            <strong>Lưu ý:</strong> Nếu phim bị giật, lag hoặc tải chậm, hãy thử chuyển sang server khác. Trường hợp không xem được, bạn có thể bật 1.1.1.1 (Cloudflare WARP) hoặc VPN vì một số nhà mạng có thể chặn kết nối tới nguồn phát.
+          </div>
           <div id="episode-servers"></div>
-        </div>
-
-        <!-- API player note -->
-        <div class="shortcut-hint">
-          Đang phát bằng player do API cung cấp. Các thao tác phát, tua, tốc độ và toàn màn hình sẽ dùng điều khiển bên trong player đó.
         </div>
       </div>
     </div>
@@ -183,15 +190,67 @@
 
 <div id="toast-container"></div>
 
-<script src="js/api.js?v=11"></script>
+<script src="js/api.js?v=12"></script>
 <script src="js/auth.js?v=10"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-<script src="js/player.js?v=16"></script>
+<script src="js/player.js?v=17"></script>
 <script>
 const activatePlayerServer = window.switchApiServer;
 window.switchApiServer = function(serverId) {
   if (typeof activatePlayerServer === 'function') activatePlayerServer(serverId);
 };
+
+(() => {
+  const nextBtn = document.getElementById('btn-next-episode');
+  const nextLabel = document.getElementById('next-episode-label');
+  if (!nextBtn || !nextLabel || typeof playEpisode !== 'function') return;
+
+  function episodeHasSource(ep) {
+    return typeof hasPlayableLink === 'function'
+      ? hasPlayableLink(ep)
+      : Boolean(ep?.link_embed || ep?.link_m3u8);
+  }
+
+  function getNextPlayableEpisode() {
+    const serverIdx = PlayerState?.currentServer ?? 0;
+    const startIdx = (PlayerState?.currentEp ?? -1) + 1;
+    const items = PlayerState?.episodes?.[serverIdx]?.items || [];
+
+    for (let epIdx = startIdx; epIdx < items.length; epIdx += 1) {
+      if (episodeHasSource(items[epIdx])) {
+        return { serverIdx, epIdx, episode: items[epIdx] };
+      }
+    }
+    return null;
+  }
+
+  function updateNextEpisodeButton() {
+    const next = getNextPlayableEpisode();
+    if (!next) {
+      nextBtn.disabled = true;
+      nextLabel.textContent = 'Đã hết tập';
+      nextBtn.title = 'Không còn tập tiếp theo';
+      return;
+    }
+
+    const episodeName = next.episode?.name || `Tập ${next.epIdx + 1}`;
+    nextBtn.disabled = false;
+    nextLabel.textContent = `Tập tiếp theo: ${episodeName}`;
+    nextBtn.title = `Phát ${episodeName}`;
+  }
+
+  const originalPlayEpisode = playEpisode;
+  playEpisode = function playEpisodeWithNextButton(...args) {
+    const result = originalPlayEpisode.apply(this, args);
+    updateNextEpisodeButton();
+    return result;
+  };
+
+  nextBtn.addEventListener('click', () => {
+    const next = getNextPlayableEpisode();
+    if (next) playEpisode(next.serverIdx, next.epIdx, false);
+  });
+})();
 
 document.getElementById('movie-poster')?.addEventListener('load', function() {
   document.getElementById('poster-wrap').style.display = 'block';

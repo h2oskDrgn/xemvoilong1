@@ -104,23 +104,27 @@ function renderMovieInfo(m) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('movie-title', m.name || '');
   const omdbRating = m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : '';
-  set('movie-sub', [m.year, m.quality, m.lang, omdbRating, m.origin_name].filter(Boolean).join(' · '));
-  set('movie-desc', m.description || '');
+  const tmdbRating = m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : '';
+  const tmdbRuntime = m.tmdb?.runtime ? `${m.tmdb.runtime} phút` : '';
+  set('movie-sub', [m.year || m.tmdb?.year, m.quality, m.lang, tmdbRating || omdbRating, tmdbRuntime, m.origin_name].filter(Boolean).join(' · '));
+  set('movie-desc', m.tmdb?.overview || m.description || m.omdb?.plot || '');
 
   const posterEl = document.getElementById('movie-poster');
-  if (posterEl && (m.poster_url || m.thumb_url)) {
-    posterEl.src = m.poster_url || m.thumb_url;
+  const posterSrc = m.tmdb?.poster_url || m.poster_url || m.thumb_url;
+  if (posterEl && posterSrc) {
+    posterEl.src = posterSrc;
     posterEl.onerror = function () { this.style.display = 'none'; };
   }
 
   const tagsEl = document.getElementById('movie-tags');
   if (tagsEl) {
+    const tmdbGenres = (m.tmdb?.genres || []).map(g => ({ name: g.name }));
     const omdbGenres = String(m.omdb?.genre || '')
       .split(',')
       .map(g => g.trim())
       .filter(Boolean)
       .map(name => ({ name }));
-    const cats = [...omdbGenres, ...(m.category || []), ...(m.country || [])];
+    const cats = [...tmdbGenres, ...omdbGenres, ...(m.category || []), ...(m.country || [])];
     const seen = new Set();
     tagsEl.innerHTML = cats
       .map(c => typeof c === 'object' ? c.name : c)
@@ -132,6 +136,18 @@ function renderMovieInfo(m) {
       })
       .map(name => `<span class="movie-tag">${escHtml(name)}</span>`)
       .join('');
+  }
+
+  const castEl = document.getElementById('movie-cast');
+  if (castEl) {
+    const cast = m.tmdb?.cast || [];
+    castEl.innerHTML = cast.length ? `<div class="movie-cast-title">Diễn viên</div>
+      <div class="movie-cast-list">
+        ${cast.slice(0, 10).map(actor => `<div class="movie-cast-chip">
+          ${actor.profile_url ? `<img src="${escHtml(actor.profile_url)}" alt="${escHtml(actor.name)}" loading="lazy">` : ''}
+          <span><strong>${escHtml(actor.name)}</strong>${actor.character ? `<em>${escHtml(actor.character)}</em>` : ''}</span>
+        </div>`).join('')}
+      </div>` : '';
   }
 }
 
@@ -306,7 +322,10 @@ function activateApiServer(server, shouldResume = false) {
   renderApiServerButtons();
   renderMovieInfo(status.movie);
   renderEpisodes(status.movie.episodes);
-  API.enrichOneWithOmdb(status.movie).then(enriched => {
+  Promise.resolve(status.movie)
+    .then(movie => typeof API.enrichOneWithTmdb === 'function' ? API.enrichOneWithTmdb(movie) : movie)
+    .then(movie => API.enrichOneWithOmdb(movie))
+    .then(enriched => {
     if (PlayerState.server !== server || PlayerState.slug !== status.slug) return;
     status.movie = enriched;
     PlayerState.movie = enriched;
