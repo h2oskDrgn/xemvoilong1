@@ -1,51 +1,130 @@
-# 🎬 DragonFilm
+# DragonFilm
 
-> **Phim Hay - Share Ngay** | Website xem phim online miễn phí
+**DragonFilm** là website xem phim online dạng static web app, chạy trực tiếp bằng HTML, CSS và JavaScript thuần. Dự án lấy dữ liệu phim từ nhiều nguồn API phim Việt, bổ sung thông tin phim từ TMDB/OMDb, có player xem phim, chọn server, lịch sử xem và giao diện responsive.
 
-## 🚀 Deploy lên GitHub Pages
+## Tính năng chính
 
-1. Tạo repository mới trên GitHub (ví dụ: `DragonFilm`)
-2. Upload toàn bộ thư mục này lên repo
-3. Vào **Settings → Pages → Source**: chọn branch `main`, thư mục `/root`
-4. Lưu → sau ~1 phút web sẽ live tại: `https://yourusername.github.io/DragonFilm/`
+- Trang chủ có hero phim nổi bật, bộ lọc theo thể loại, quốc gia, loại phim và tìm kiếm.
+- Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
+- Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
+- Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
+- Hiển thị thông tin bổ sung từ TMDB và OMDb: điểm TMDB, điểm IMDb, mô tả, thể loại, poster/backdrop và diễn viên.
+- Lịch sử xem lưu trên thiết bị bằng `localStorage`, có xuất/nhập file JSON.
+- Đăng nhập/đăng ký cục bộ bằng `localStorage`.
+- Giao diện tối, responsive cho desktop và mobile.
 
-## 📁 Cấu Trúc
+## Nguồn dữ liệu
 
-```
+| Nguồn | Vai trò | API/Base URL |
+| --- | --- | --- |
+| Server 1 - KKPhim | Danh sách phim, tìm kiếm, chi tiết, tập phim | `https://phimapi.com` |
+| Server 2 - OPhim | Danh sách phim, tìm kiếm, chi tiết, tập phim | `https://ophim1.com` |
+| Server 3 - NguonC | Danh sách phim, tìm kiếm, chi tiết, tập phim | `https://phim.nguonc.com` |
+| TMDB | Metadata phim, điểm TMDB, mô tả, thể loại, diễn viên | `https://api.themoviedb.org/3` |
+| OMDb | Điểm IMDb và metadata phụ | `https://www.omdbapi.com` |
+
+## Cấu trúc thư mục
+
+```text
 DragonFilm/
-├── index.html          # Trang chủ
-├── movie.html          # Trang xem phim + player
-├── history.html        # Lịch sử xem
+├── index.html          # Trang chủ, lọc phim, tìm kiếm, danh sách phim
+├── movie.html          # Trang xem phim, player, chọn server/tập
+├── history.html        # Lịch sử xem, xuất/nhập lịch sử
+├── assets/
+│   └── logo.png        # Logo
 ├── css/
-│   ├── style.css       # Stylesheet chính
-│   └── player.css      # Stylesheet cho player
-├── js/
-│   ├── api.js          # Layer gọi API phim
-│   ├── auth.js         # Auth + utilities dùng chung
-│   ├── main.js         # Logic trang chủ
-│   └── player.js       # Logic player
-└── assets/
-    └── logo.png        # Logo DragonFilm
+│   ├── style.css       # Style chung cho trang chủ, lịch sử, modal, responsive
+│   └── player.css      # Style riêng cho trang xem phim/player
+└── js/
+    ├── api.js          # Layer gọi API phim, TMDB, OMDb, normalize dữ liệu
+    ├── auth.js         # Auth localStorage, history, toast, menu
+    ├── main.js         # Logic trang chủ, lọc, tìm kiếm, render card/hero
+    ├── player.js       # Logic player, server/tập, lịch sử xem, next tập
+    └── annouce.js      # Script phụ nếu cần thông báo
 ```
 
-## 🌐 Nguồn Phim
+## Cách chạy local
 
-| Server | Tên | API Base |
-|--------|-----|----------|
-| Server 1 | KKPhim (KKP) | `phimapi.com` |
-| Server 2 | OPhim (OP) | `ophim1.com` |
-| Server 3 | NguonC (NC) | `phim.nguonc.com` |
+Dự án không cần build. Có thể mở trực tiếp `index.html`, nhưng nên chạy bằng local server để tránh lỗi CORS hoặc đường dẫn tương đối trong một số trình duyệt.
 
-## ✨ Tính Năng
+Ví dụ với Python:
 
-- **Trang chủ**: Banner phim nổi bật, lọc thể loại/quốc gia/loại phim, tìm kiếm
-- **Player**: HTML5 video hoặc iframe embed, play/pause click, tua ±10s, giữ = 2×, PiP, fullscreen
-- **Auth**: Đăng nhập/đăng ký bằng localStorage
-- **Lịch sử**: Tự động lưu phim đã xem + thời gian xem dở
-- **Responsive**: Mobile-first, hỗ trợ màn hình dọc
+```bash
+cd /path/to/xemvoilong1-main
+python3 -m http.server 8000
+```
 
-## 🎨 Màu sắc
+Sau đó mở:
 
-- Nền tối: `#050a05`
-- Xanh neon: `#39ff14`
-- Font: Bebas Neue (display) + Rajdhani (title) + Nunito (body)
+```text
+http://localhost:8000
+```
+
+## Deploy lên GitHub Pages
+
+1. Tạo repository mới trên GitHub.
+2. Upload toàn bộ file trong thư mục dự án.
+3. Vào **Settings -> Pages**.
+4. Chọn source là branch `main`, thư mục `/root` hoặc `/docs` tùy cách bạn upload.
+5. Lưu lại và chờ GitHub Pages build xong.
+
+Ví dụ URL sau khi deploy:
+
+```text
+https://username.github.io/repository-name/
+```
+
+## Cấu hình API key
+
+API key đang được cấu hình trong [js/api.js](js/api.js):
+
+- `API.tmdb.apiKey`: key TMDB.
+- `API.omdb.apiKey`: key OMDb.
+
+Vì đây là web tĩnh chạy hoàn toàn ở frontend, các key đặt trong JavaScript sẽ hiển thị công khai khi deploy. Nếu dùng production nghiêm túc, nên chuyển TMDB/OMDb request qua backend/proxy để bảo vệ key.
+
+## Ghi chú khi xem phim
+
+- Nếu phim bị giật, lag hoặc tải chậm, hãy đổi sang server khác.
+- Nếu không xem được, có thể bật `1.1.1.1` / Cloudflare WARP hoặc VPN vì một số nhà mạng có thể chặn nguồn phát.
+- Không phải phim nào cũng có đủ ở cả 3 server; trang xem phim sẽ tự disable server không có nguồn phát.
+- Một số nguồn dùng iframe/player từ API, điều khiển phát sẽ phụ thuộc player bên trong iframe.
+
+## LocalStorage
+
+Dự án dùng `localStorage` để lưu:
+
+- Server đang chọn: `xvl_server`.
+- Tài khoản local.
+- Lịch sử xem.
+- Thời gian xem dở.
+- Cache metadata OMDb/TMDB.
+
+Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi đổi thiết bị, dùng chức năng **Xuất lịch sử** và **Nhập lịch sử** trong `history.html`.
+
+## Troubleshooting
+
+**Không tải được danh sách phim**
+
+- Kiểm tra kết nối mạng.
+- Thử refresh trang.
+- Một trong các API nguồn có thể đang lỗi tạm thời.
+
+**Phim có nhưng không xem được**
+
+- Đổi server ở phần **Nguồn Phim**.
+- Thử tập khác nếu phim bộ.
+- Bật `1.1.1.1` hoặc VPN.
+
+**Không hiện điểm TMDB/IMDb hoặc diễn viên**
+
+- TMDB/OMDb có thể không tìm được phim tương ứng theo tên/năm.
+- API key có thể hết quota hoặc request bị chặn.
+- Cache localStorage có thể cũ; thử xoá cache trình duyệt và tải lại.
+
+## Ghi chú phát triển
+
+- Đây là dự án frontend tĩnh, không có backend và không có bước build.
+- Khi sửa CSS/JS, tăng query version trong HTML như `style.css?v=...` hoặc `main.js?v=...` để tránh cache trình duyệt.
+- Khi thêm nguồn phim mới, cập nhật `API.servers` trong `js/api.js` và đảm bảo normalize dữ liệu về cùng format.
+
