@@ -389,7 +389,7 @@ main { padding-top: var(--header-h); min-height: 100vh; }
    ============================================================ */
 .weekly-rankings {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin: 8px 0 28px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -436,6 +436,18 @@ main { padding-top: var(--header-h); min-height: 100vh; }
   color: var(--accent-sage);
   border-color: rgba(143,169,154,0.34);
   background: rgba(143,169,154,0.11);
+}
+
+.weekly-rank-source.korea {
+  color: #f0c98c;
+  border-color: rgba(240,201,140,0.34);
+  background: rgba(240,201,140,0.11);
+}
+
+.weekly-rank-source.china {
+  color: #f28f8f;
+  border-color: rgba(242,143,143,0.34);
+  background: rgba(242,143,143,0.11);
 }
 
 .weekly-rank-head h2 {

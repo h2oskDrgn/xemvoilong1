@@ -6,7 +6,7 @@
   <title>DragonFilm - Phim Hay Share Ngay</title>
   <meta name="description" content="Xem phim online miễn phí, chất lượng cao - DragonFilm">
   <link rel="icon" href="assets/logo.png?v=10" type="image/png">
-  <link rel="stylesheet" href="css/style.css?v=19">
+  <link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
 
@@ -192,6 +192,32 @@
       </div>
       <div class="weekly-rank-panel">
         <div class="weekly-rank-head">
+          <span class="weekly-rank-source korea">TMDB KR</span>
+          <div>
+            <h2>Phim Hàn tuần</h2>
+            <p>Hot 7 ngày</p>
+          </div>
+        </div>
+        <div class="weekly-rank-list" id="tmdb-korea-weekly-rank">
+          <div class="weekly-rank-loading">Đang tải...</div>
+        </div>
+        <button class="weekly-rank-more" type="button" data-rank-key="tmdbKoreaWeekly" hidden>Xem thêm</button>
+      </div>
+      <div class="weekly-rank-panel">
+        <div class="weekly-rank-head">
+          <span class="weekly-rank-source china">TMDB CN</span>
+          <div>
+            <h2>Phim Trung tuần</h2>
+            <p>Hot 7 ngày</p>
+          </div>
+        </div>
+        <div class="weekly-rank-list" id="tmdb-china-weekly-rank">
+          <div class="weekly-rank-loading">Đang tải...</div>
+        </div>
+        <button class="weekly-rank-more" type="button" data-rank-key="tmdbChinaWeekly" hidden>Xem thêm</button>
+      </div>
+      <div class="weekly-rank-panel">
+        <div class="weekly-rank-head">
           <span class="weekly-rank-source anilist">AniList</span>
           <div>
             <h2>Anime tuần</h2>
@@ -307,9 +333,9 @@
 
 <div id="toast-container"></div>
 
-<script src="js/api.js?v=17"></script>
+<script src="js/api.js?v=18"></script>
 <script src="js/auth.js?v=11"></script>
-<script src="js/main.js?v=18"></script>
+<script src="js/main.js?v=19"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(location.search);

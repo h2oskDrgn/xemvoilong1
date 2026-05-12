@@ -58,6 +58,8 @@ const RANKING_LIMIT = 20;
 const RANKING_COLLAPSED = 5;
 const rankingState = {
   tmdbWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-weekly-rank' },
+  tmdbKoreaWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-korea-weekly-rank' },
+  tmdbChinaWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-china-weekly-rank' },
   animeWeekly: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-weekly-rank' },
   animeSeason: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-season-rank' },
 };
@@ -228,6 +230,15 @@ function rankingTitle(item, type) {
     : (item.title || item.original_title || 'Phim');
 }
 
+function rankingAltTitle(item, type) {
+  if (type === 'anime') {
+    const title = rankingTitle(item, type);
+    return [item.title_romaji, item.title_native, ...(item.synonyms || [])]
+      .find(value => value && value !== title) || '';
+  }
+  return item.original_title && item.original_title !== item.title ? item.original_title : '';
+}
+
 function renderRankingRows(items, type, expanded = false) {
   if (!items?.length) {
     return '<div class="weekly-rank-empty">Chưa có dữ liệu.</div>';
@@ -235,6 +246,7 @@ function renderRankingRows(items, type, expanded = false) {
 
   return items.slice(0, expanded ? items.length : RANKING_COLLAPSED).map((item, index) => {
     const title = rankingTitle(item, type);
+    const altTitle = rankingAltTitle(item, type);
     const poster = type === 'anime'
       ? (item.cover_url || item.banner_url || '')
       : (item.poster_url || item.backdrop_url || '');
@@ -249,7 +261,7 @@ function renderRankingRows(items, type, expanded = false) {
       : '<span class="weekly-rank-poster-placeholder"></span>';
     const year = type === 'anime' ? (item.season_year || '') : (item.year || '');
 
-    return `<button class="weekly-rank-row" type="button" data-rank-title="${escHtml(title)}" data-rank-year="${escHtml(year)}">
+    return `<button class="weekly-rank-row" type="button" data-rank-title="${escHtml(title)}" data-rank-alt="${escHtml(altTitle)}" data-rank-year="${escHtml(year)}">
       <span class="weekly-rank-no">${index + 1}.</span>
       <span class="weekly-rank-poster">${img}</span>
       <span class="weekly-rank-copy">
@@ -276,6 +288,8 @@ function renderRankingPanel(key) {
 
 async function loadWeeklyRankings() {
   const tmdbWrap = document.getElementById('tmdb-weekly-rank');
+  const koreaWrap = document.getElementById('tmdb-korea-weekly-rank');
+  const chinaWrap = document.getElementById('tmdb-china-weekly-rank');
   const animeWeeklyWrap = document.getElementById('anilist-weekly-rank');
   const animeWrap = document.getElementById('anilist-season-rank');
   const seasonLabel = document.getElementById('anilist-season-label');
@@ -287,6 +301,24 @@ async function loadWeeklyRankings() {
         renderRankingPanel('tmdbWeekly');
       })
       .catch(() => { tmdbWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được TMDB.</div>'; });
+  }
+
+  if (koreaWrap && typeof API.getTmdbKoreaWeeklyRanking === 'function') {
+    API.getTmdbKoreaWeeklyRanking(RANKING_LIMIT)
+      .then(items => {
+        rankingState.tmdbKoreaWeekly.items = items || [];
+        renderRankingPanel('tmdbKoreaWeekly');
+      })
+      .catch(() => { koreaWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được TMDB.</div>'; });
+  }
+
+  if (chinaWrap && typeof API.getTmdbChinaWeeklyRanking === 'function') {
+    API.getTmdbChinaWeeklyRanking(RANKING_LIMIT)
+      .then(items => {
+        rankingState.tmdbChinaWeekly.items = items || [];
+        renderRankingPanel('tmdbChinaWeekly');
+      })
+      .catch(() => { chinaWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được TMDB.</div>'; });
   }
 
   if (animeWeeklyWrap && typeof API.getAniListWeeklyAnimeRanking === 'function') {
@@ -314,6 +346,7 @@ async function loadWeeklyRankings() {
 async function openRankingMovie(btn) {
   const title = btn?.dataset?.rankTitle || '';
   if (!title || btn.disabled) return;
+  const titleCandidates = [...new Set([title, btn.dataset.rankAlt || ''].map(value => String(value).trim()).filter(Boolean))];
   const originalText = btn.querySelector('.weekly-rank-score')?.textContent || '';
   btn.disabled = true;
   btn.classList.add('is-loading');
@@ -322,10 +355,14 @@ async function openRankingMovie(btn) {
   showToast(`Đang tìm nguồn phát cho "${title}"...`, 'info');
 
   try {
-    const found = await API.findPlayableMovie(title, {
-      year: btn.dataset.rankYear || '',
-      serverIds: HOME_SEARCH_SERVERS,
-    });
+    let found = null;
+    for (const candidate of titleCandidates) {
+      found = await API.findPlayableMovie(candidate, {
+        year: btn.dataset.rankYear || '',
+        serverIds: HOME_SEARCH_SERVERS,
+      });
+      if (found) break;
+    }
     if (!found) {
       showToast(`"${title}" chưa có trong 3 nguồn phát.`, 'error');
       return;

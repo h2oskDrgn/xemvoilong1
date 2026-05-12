@@ -558,6 +558,82 @@ const API = {
       .slice(0, limit);
   },
 
+  _tmdbRegionMatches(item, languages = [], countries = []) {
+    const languageSet = new Set((languages || []).map(value => String(value).toLowerCase()));
+    const countrySet = new Set((countries || []).map(value => String(value).toUpperCase()));
+    const lang = String(item?.original_language || '').toLowerCase();
+    const originCountries = Array.isArray(item?.origin_country) ? item.origin_country : [];
+    return (lang && languageSet.has(lang))
+      || originCountries.some(country => countrySet.has(String(country).toUpperCase()));
+  },
+
+  _dedupeTmdbRanking(items) {
+    const map = new Map();
+    (items || []).forEach(item => {
+      if (!item) return;
+      const mediaType = item.media_type || 'movie';
+      const key = `${mediaType}:${item.id || item.title || item.name}`;
+      if (map.has(key)) return;
+      const normalized = this._normalizeTmdbMovie({ ...item, media_type: mediaType });
+      if (normalized) map.set(key, normalized);
+    });
+    return [...map.values()];
+  },
+
+  async getTmdbRegionalWeeklyRanking({ limit = 20, languages = [], countries = [] } = {}) {
+    const safeLimit = Math.max(1, Number(limit) || 20);
+    const weeklyPages = [1, 2, 3, 4, 5];
+    const weeklyResults = await Promise.all(
+      weeklyPages.map(page => this._fetchTmdb('/trending/all/week', { page, include_adult: false }).catch(() => null))
+    );
+
+    const rawItems = weeklyResults
+      .flatMap(page => page?.results || [])
+      .filter(item => ['movie', 'tv'].includes(item?.media_type || 'movie'))
+      .filter(item => this._tmdbRegionMatches(item, languages, countries));
+
+    if (rawItems.length < safeLimit) {
+      const baseParams = {
+        page: 1,
+        include_adult: false,
+        sort_by: 'popularity.desc',
+      };
+      const languageList = languages.length ? languages : [''];
+      const countryList = countries.length ? countries : [''];
+      const discoverTasks = ['movie', 'tv'].flatMap(mediaType =>
+        languageList.flatMap(language =>
+          countryList.map(country => this._fetchTmdb(`/discover/${mediaType}`, {
+            ...baseParams,
+            ...(language ? { with_original_language: language } : {}),
+            ...(country ? { with_origin_country: country } : {}),
+          })
+            .then(data => (data?.results || []).map(item => ({ ...item, media_type: mediaType })))
+            .catch(() => []))
+        )
+      );
+      const discoverItems = (await Promise.all(discoverTasks)).flat();
+      rawItems.push(...discoverItems);
+    }
+
+    return this._dedupeTmdbRanking(rawItems).slice(0, safeLimit);
+  },
+
+  async getTmdbKoreaWeeklyRanking(limit = 20) {
+    return this.getTmdbRegionalWeeklyRanking({
+      limit,
+      languages: ['ko'],
+      countries: ['KR'],
+    });
+  },
+
+  async getTmdbChinaWeeklyRanking(limit = 20) {
+    return this.getTmdbRegionalWeeklyRanking({
+      limit,
+      languages: ['zh', 'cn'],
+      countries: ['CN', 'HK', 'TW'],
+    });
+  },
+
   async _getAniListRanking({ limit = 12, seasonInfo = null, cacheKey = 'weekly' } = {}) {
     const seasonArgs = seasonInfo ? ', season: $season, seasonYear: $seasonYear' : '';
     const seasonVars = seasonInfo ? ', $season: MediaSeason, $seasonYear: Int' : '';

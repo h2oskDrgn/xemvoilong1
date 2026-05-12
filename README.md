@@ -5,7 +5,7 @@
 ## Tính năng chính
 
 - Trang chủ có hero phim nổi bật, bộ lọc theo thể loại, quốc gia, loại phim và tìm kiếm.
-- Có bảng xếp hạng gọn trên trang chủ: phim trending tuần từ TMDB, anime trending tuần và anime season từ AniList, có nút xem thêm.
+- Có bảng xếp hạng gọn trên trang chủ: phim trending tuần từ TMDB, phim Hàn/Trung hot tuần từ TMDB, anime trending tuần và anime season từ AniList, có nút xem thêm.
 - Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
 - Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
 - Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
