@@ -42,6 +42,7 @@ const Icons = {
    INIT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', async () => {
+  initMovieLibraryActions();
   PlayerState.slug   = qp('slug')   || '';
   PlayerState.server = qp('server') || API.currentServer;
   PlayerState.requestedEpisodeServer = parseInt(qp('epServer') || '0', 10) || 0;
@@ -105,12 +106,25 @@ function renderMovieInfo(m) {
   set('movie-title', m.name || '');
   const omdbRating = m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : '';
   const tmdbRating = m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : '';
+  const anilistRating = m.anilist?.average_score ? `AniList ${m.anilist.average_score}%` : '';
   const tmdbRuntime = m.tmdb?.runtime ? `${m.tmdb.runtime} phút` : '';
-  set('movie-sub', [m.year || m.tmdb?.year, m.quality, m.lang, tmdbRating, omdbRating, tmdbRuntime, m.origin_name].filter(Boolean).join(' · '));
-  set('movie-desc', m.tmdb?.overview || m.description || m.omdb?.plot || '');
+  const anilistRuntime = m.anilist?.duration ? `${m.anilist.duration} phút/tập` : '';
+  const anilistEpisodes = m.anilist?.episodes ? `${m.anilist.episodes} tập` : '';
+  set('movie-sub', [
+    m.year || m.tmdb?.year || m.anilist?.season_year,
+    m.quality,
+    m.lang,
+    anilistRating,
+    tmdbRating,
+    omdbRating,
+    tmdbRuntime || anilistRuntime,
+    anilistEpisodes,
+    m.origin_name,
+  ].filter(Boolean).join(' · '));
+  set('movie-desc', m.anilist?.description || m.tmdb?.overview || m.description || m.omdb?.plot || '');
 
   const posterEl = document.getElementById('movie-poster');
-  const posterSrc = m.tmdb?.poster_url || m.poster_url || m.thumb_url;
+  const posterSrc = m.anilist?.cover_url || m.tmdb?.poster_url || m.poster_url || m.thumb_url;
   if (posterEl && posterSrc) {
     posterEl.src = posterSrc;
     posterEl.onerror = function () { this.style.display = 'none'; };
@@ -118,13 +132,15 @@ function renderMovieInfo(m) {
 
   const tagsEl = document.getElementById('movie-tags');
   if (tagsEl) {
+    const anilistGenres = (m.anilist?.genres || []).map(name => ({ name }));
+    const anilistStudios = (m.anilist?.studios || []).map(name => ({ name }));
     const tmdbGenres = (m.tmdb?.genres || []).map(g => ({ name: g.name }));
     const omdbGenres = String(m.omdb?.genre || '')
       .split(',')
       .map(g => g.trim())
       .filter(Boolean)
       .map(name => ({ name }));
-    const cats = [...tmdbGenres, ...omdbGenres, ...(m.category || []), ...(m.country || [])];
+    const cats = [...anilistGenres, ...anilistStudios, ...tmdbGenres, ...omdbGenres, ...(m.category || []), ...(m.country || [])];
     const seen = new Set();
     tagsEl.innerHTML = cats
       .map(c => typeof c === 'object' ? c.name : c)
@@ -141,18 +157,83 @@ function renderMovieInfo(m) {
   const castEl = document.getElementById('movie-cast');
   if (castEl) {
     const cast = m.tmdb?.cast || [];
-    castEl.innerHTML = cast.length ? `<div class="movie-cast-title">Diễn viên</div>
-      <div class="movie-cast-list">
-        ${cast.slice(0, 10).map(actor => `<div class="movie-cast-chip">
-          ${actor.profile_url ? `<img src="${escHtml(actor.profile_url)}" alt="${escHtml(actor.name)}" loading="lazy">` : ''}
-          <span><strong>${escHtml(actor.name)}</strong>${actor.character ? `<em>${escHtml(actor.character)}</em>` : ''}</span>
-        </div>`).join('')}
-      </div>` : '';
+    const animeCharacters = (m.anilist?.characters || []).map(item => ({
+      name: item.voice_actor || item.name,
+      character: item.voice_actor ? item.name : item.role,
+      profile_url: item.voice_actor_image_url || item.image_url,
+    }));
+    const sections = [];
+    if (cast.length) {
+      sections.push(`<div class="movie-cast-title">Diễn viên</div>
+        <div class="movie-cast-list">
+          ${cast.slice(0, 10).map(actor => `<div class="movie-cast-chip">
+            ${actor.profile_url ? `<img src="${escHtml(actor.profile_url)}" alt="${escHtml(actor.name)}" loading="lazy">` : ''}
+            <span><strong>${escHtml(actor.name)}</strong>${actor.character ? `<em>${escHtml(actor.character)}</em>` : ''}</span>
+          </div>`).join('')}
+        </div>`);
+    }
+    if (animeCharacters.length) {
+      sections.push(`<div class="movie-cast-title">Nhân vật / Lồng tiếng</div>
+        <div class="movie-cast-list">
+          ${animeCharacters.slice(0, 10).map(actor => `<div class="movie-cast-chip">
+            ${actor.profile_url ? `<img src="${escHtml(actor.profile_url)}" alt="${escHtml(actor.name)}" loading="lazy">` : ''}
+            <span><strong>${escHtml(actor.name)}</strong>${actor.character ? `<em>${escHtml(actor.character)}</em>` : ''}</span>
+          </div>`).join('')}
+        </div>`);
+    }
+    castEl.innerHTML = sections.join('');
   }
+
+  renderMovieLibraryActions(m);
 }
 
 function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function movieForLibrary(movie = PlayerState.movie) {
+  return {
+    ...(movie || {}),
+    slug: PlayerState.slug || movie?.slug || '',
+    _server: PlayerState.server || movie?._server || API.currentServer,
+    _sources: Object.keys(PlayerState.serverSlugs || {}),
+    _serverSlugs: PlayerState.serverSlugs || {},
+  };
+}
+
+function renderMovieLibraryActions(movie = PlayerState.movie) {
+  if (typeof MovieLibrary === 'undefined') return;
+  const target = movieForLibrary(movie);
+  const watchBtn = document.getElementById('btn-watch-later');
+  const likeBtn = document.getElementById('btn-like-movie');
+  const watchActive = MovieLibrary.has('watchLater', target);
+  const likeActive = MovieLibrary.has('liked', target);
+  if (watchBtn) {
+    watchBtn.classList.toggle('active', watchActive);
+    watchBtn.textContent = watchActive ? '✓ Đã lưu xem sau' : '＋ Xem sau';
+  }
+  if (likeBtn) {
+    likeBtn.classList.toggle('active', likeActive);
+    likeBtn.textContent = likeActive ? '♥ Đã thích' : '♡ Thích phim';
+  }
+}
+
+function initMovieLibraryActions() {
+  if (typeof MovieLibrary === 'undefined') return;
+  document.getElementById('btn-watch-later')?.addEventListener('click', () => {
+    const movie = movieForLibrary();
+    if (!movie.slug) return showToast('Phim chưa tải xong, thử lại sau.', 'error');
+    const added = MovieLibrary.toggle('watchLater', movie);
+    renderMovieLibraryActions();
+    showToast(added ? 'Đã thêm vào danh sách xem sau' : 'Đã bỏ khỏi danh sách xem sau');
+  });
+  document.getElementById('btn-like-movie')?.addEventListener('click', () => {
+    const movie = movieForLibrary();
+    if (!movie.slug) return showToast('Phim chưa tải xong, thử lại sau.', 'error');
+    const added = MovieLibrary.toggle('liked', movie);
+    renderMovieLibraryActions();
+    showToast(added ? 'Đã thêm vào phim yêu thích' : 'Đã bỏ khỏi phim yêu thích');
+  });
 }
 
 /* ============================================================
@@ -324,6 +405,7 @@ function activateApiServer(server, shouldResume = false) {
   renderEpisodes(status.movie.episodes);
   Promise.resolve(status.movie)
     .then(movie => typeof API.enrichOneWithTmdb === 'function' ? API.enrichOneWithTmdb(movie) : movie)
+    .then(movie => typeof API.enrichOneWithAniList === 'function' ? API.enrichOneWithAniList(movie) : movie)
     .then(movie => API.enrichOneWithOmdb(movie))
     .then(enriched => {
     if (PlayerState.server !== server || PlayerState.slug !== status.slug) return;

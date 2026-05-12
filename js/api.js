@@ -67,6 +67,12 @@ const API = {
     cacheTtlMs: 6 * 60 * 60 * 1000,
   },
 
+  anilist: {
+    base: 'https://graphql.anilist.co',
+    cachePrefix: 'dragonfilm_anilist_',
+    cacheTtlMs: 12 * 60 * 60 * 1000,
+  },
+
   _current: 'kkphim',
 
   get currentServer() { return this._current; },
@@ -312,6 +318,51 @@ const API = {
     }
   },
 
+  _anilistCacheGet(key) {
+    try {
+      const raw = localStorage.getItem(`${this.anilist.cachePrefix}${key}`);
+      if (!raw) return undefined;
+      const cached = JSON.parse(raw);
+      if (!cached || Date.now() - cached.ts > this.anilist.cacheTtlMs) return undefined;
+      return cached.data;
+    } catch {
+      return undefined;
+    }
+  },
+
+  _anilistCacheSet(key, data) {
+    try {
+      localStorage.setItem(`${this.anilist.cachePrefix}${key}`, JSON.stringify({ ts: Date.now(), data }));
+    } catch {
+      // Ignore storage quota/private mode.
+    }
+  },
+
+  async _fetchAniList(query, variables = {}, cacheKey = '') {
+    const cached = cacheKey ? this._anilistCacheGet(cacheKey) : undefined;
+    if (cached !== undefined) return cached;
+
+    try {
+      const res = await fetch(this.anilist.base, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data?.errors?.length) throw new Error(data.errors[0]?.message || 'GraphQL error');
+      const payload = data?.data || null;
+      if (cacheKey) this._anilistCacheSet(cacheKey, payload);
+      return payload;
+    } catch (err) {
+      console.warn('[AniList] fetch error:', err);
+      return null;
+    }
+  },
+
   _tmdbImage(path, size = 'w500') {
     if (!path) return '';
     if (String(path).startsWith('http')) return path;
@@ -392,6 +443,323 @@ const API = {
     score += Math.min(8, Number(result?.vote_count || 0) / 1000);
     score += Math.min(8, Number(result?.popularity || 0) / 20);
     return score;
+  },
+
+  _stripHtml(value) {
+    return String(value || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ')
+      .trim();
+  },
+
+  _isLikelyAnime(movie) {
+    const taxonomy = [
+      ...(movie?.category || []).map(item => typeof item === 'object' ? `${item.name} ${item.slug}` : item),
+      ...(movie?.country || []).map(item => typeof item === 'object' ? `${item.name} ${item.slug}` : item),
+    ].join(' ').toLowerCase();
+    const haystack = [
+      movie?.name,
+      movie?.origin_name,
+      movie?.slug,
+      movie?.type,
+      taxonomy,
+    ].join(' ').toLowerCase();
+
+    return /anime|hoat[-\s]?hinh|hoạt\s*hình|donghua|ova|ona/.test(haystack)
+      || (/nhat[-\s]?ban|nhật\s*bản|japan/.test(taxonomy) && /hoat[-\s]?hinh|hoạt\s*hình|anime/.test(taxonomy));
+  },
+
+  _scoreAniListResult(query, year, result) {
+    const target = this._titleKey(query);
+    const title = result?.title || {};
+    const candidates = [
+      title.romaji,
+      title.english,
+      title.native,
+      ...((result?.synonyms || []).slice(0, 8)),
+    ].map(value => this._titleKey(value)).filter(Boolean);
+
+    let score = 0;
+    candidates.forEach(candidate => {
+      if (candidate === target) score = Math.max(score, 100);
+      else if (candidate.includes(target) || target.includes(candidate)) score = Math.max(score, 82);
+      else {
+        const words = target.split(/\s+/).filter(word => word.length > 2);
+        const overlap = words.filter(word => candidate.includes(word)).length;
+        score = Math.max(score, overlap * 14);
+      }
+    });
+
+    if (year && String(result?.seasonYear || result?.startDate?.year || '') === year) score += 16;
+    score += Math.min(8, Number(result?.popularity || 0) / 12000);
+    score += Math.min(6, Number(result?.averageScore || 0) / 20);
+    return score;
+  },
+
+  _normalizeAniListMedia(media) {
+    if (!media) return null;
+    const title = media.title || {};
+    const characters = (media.characters?.edges || [])
+      .filter(edge => edge?.node?.name?.full)
+      .slice(0, 10)
+      .map(edge => {
+        const voiceActor = edge.voiceActors?.[0];
+        return {
+          id: edge.node.id,
+          name: edge.node.name.full,
+          role: edge.role || '',
+          image_url: edge.node.image?.medium || '',
+          voice_actor: voiceActor?.name?.full || '',
+          voice_actor_image_url: voiceActor?.image?.medium || '',
+        };
+      });
+
+    return {
+      id: media.id,
+      title_romaji: title.romaji || '',
+      title_english: title.english || '',
+      title_native: title.native || '',
+      synonyms: media.synonyms || [],
+      description: this._stripHtml(media.description),
+      format: media.format || '',
+      status: media.status || '',
+      episodes: media.episodes || '',
+      duration: media.duration || '',
+      season_year: media.seasonYear || media.startDate?.year || '',
+      average_score: Number(media.averageScore || 0),
+      mean_score: Number(media.meanScore || 0),
+      popularity: Number(media.popularity || 0),
+      genres: media.genres || [],
+      studios: (media.studios?.nodes || []).map(studio => studio.name).filter(Boolean),
+      cover_url: media.coverImage?.extraLarge || media.coverImage?.large || '',
+      banner_url: media.bannerImage || '',
+      site_url: media.siteUrl || '',
+      characters,
+    };
+  },
+
+  _currentAniListSeason(date = new Date()) {
+    const month = date.getMonth() + 1;
+    if (month <= 3) return { season: 'WINTER', label: 'Mùa Đông', year: date.getFullYear() };
+    if (month <= 6) return { season: 'SPRING', label: 'Mùa Xuân', year: date.getFullYear() };
+    if (month <= 9) return { season: 'SUMMER', label: 'Mùa Hè', year: date.getFullYear() };
+    return { season: 'FALL', label: 'Mùa Thu', year: date.getFullYear() };
+  },
+
+  async getTmdbWeeklyRanking(limit = 5) {
+    const data = await this._fetchTmdb('/trending/movie/week', { page: 1, include_adult: false });
+    return (data?.results || [])
+      .map(item => this._normalizeTmdbMovie({ ...item, media_type: 'movie' }))
+      .filter(Boolean)
+      .slice(0, limit);
+  },
+
+  async _getAniListRanking({ limit = 12, seasonInfo = null, cacheKey = 'weekly' } = {}) {
+    const seasonArgs = seasonInfo ? ', season: $season, seasonYear: $seasonYear' : '';
+    const seasonVars = seasonInfo ? ', $season: MediaSeason, $seasonYear: Int' : '';
+    const query = `
+      query ($perPage: Int${seasonVars}) {
+        Page(page: 1, perPage: $perPage) {
+          media(type: ANIME${seasonArgs}, sort: TRENDING_DESC) {
+            id
+            title { romaji english native }
+            synonyms
+            description(asHtml: false)
+            format
+            status
+            episodes
+            duration
+            seasonYear
+            startDate { year }
+            averageScore
+            meanScore
+            popularity
+            genres
+            coverImage { large extraLarge }
+            bannerImage
+            siteUrl
+            studios(isMain: true) { nodes { name } }
+          }
+        }
+      }`;
+    const variables = {
+      ...(seasonInfo ? { season: seasonInfo.season, seasonYear: seasonInfo.year } : {}),
+      perPage: limit,
+    };
+    return (await this._fetchAniList(query, variables, `ranking:${cacheKey}:v1:${limit}`))?.Page?.media || [];
+  },
+
+  async getAniListWeeklyAnimeRanking(limit = 12) {
+    const items = await this._getAniListRanking({ limit, cacheKey: 'weekly' });
+    return items
+      .map(media => this._normalizeAniListMedia(media))
+      .filter(Boolean)
+      .slice(0, limit);
+  },
+
+  async getAniListSeasonAnimeRanking(limit = 12) {
+    const seasonInfo = this._currentAniListSeason();
+    const items = await this._getAniListRanking({
+      limit,
+      seasonInfo,
+      cacheKey: `season:${seasonInfo.season}:${seasonInfo.year}`,
+    });
+    const normalized = items
+      .map(media => this._normalizeAniListMedia(media))
+      .filter(Boolean)
+      .slice(0, limit);
+    return {
+      ...seasonInfo,
+      items: normalized,
+    };
+  },
+
+  _hasPlayableLink(ep) {
+    return Boolean(ep?.link_embed || ep?.link_m3u8);
+  },
+
+  _hasPlayableEpisode(movie) {
+    return (movie?.episodes || []).some(server => (server?.items || []).some(ep => this._hasPlayableLink(ep)));
+  },
+
+  _scoreLocalMovieResult(query, year, movie) {
+    const target = this._titleKey(query);
+    const candidates = [
+      movie?.origin_name,
+      movie?.name,
+      String(movie?.slug || '').replace(/-/g, ' '),
+    ].map(value => this._titleKey(value)).filter(Boolean);
+    let score = 0;
+    candidates.forEach(candidate => {
+      if (candidate === target) score = Math.max(score, 100);
+      else if (candidate.includes(target) || target.includes(candidate)) score = Math.max(score, 82);
+      else {
+        const words = target.split(/\s+/).filter(word => word.length > 2);
+        const overlap = words.filter(word => candidate.includes(word)).length;
+        score = Math.max(score, overlap * 14);
+      }
+    });
+    if (year && String(movie?.year || '').includes(String(year))) score += 14;
+    return score;
+  },
+
+  async findPlayableMovie(query, options = {}) {
+    const title = String(query || '').trim();
+    if (!title) return null;
+    const serverIds = options.serverIds || Object.keys(this.servers);
+    const year = String(options.year || '').match(/\d{4}/)?.[0] || '';
+    const result = await this.searchAll(title, 1, serverIds);
+    const candidates = (result?.items || [])
+      .map(movie => ({ movie, score: this._scoreLocalMovieResult(title, year, movie) }))
+      .filter(item => item.score >= 38)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+
+    for (const { movie } of candidates) {
+      const slugs = movie._serverSlugs || { [movie._server || serverIds[0]]: movie.slug };
+      const sources = (movie._sources?.length ? movie._sources : Object.keys(slugs))
+        .filter(server => serverIds.includes(server));
+
+      for (const server of sources) {
+        const slug = slugs[server];
+        if (!slug) continue;
+        const detail = await this.getDetailFromServer(server, slug, { quiet: true });
+        if (!detail || !this._hasPlayableEpisode(detail)) continue;
+        return {
+          ...movie,
+          ...detail,
+          _server: server,
+          slug: detail.slug || slug,
+          _sources: sources,
+          _serverSlugs: { ...slugs, [server]: detail.slug || slug },
+        };
+      }
+    }
+
+    return null;
+  },
+
+  async getAniListInfo(movie) {
+    if (!this._isLikelyAnime(movie)) return null;
+
+    const cacheKey = `info:v1:${this._movieKey(movie || {})}`;
+    const cached = this._anilistCacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+
+    const query = `
+      query ($search: String) {
+        Page(page: 1, perPage: 8) {
+          media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+            id
+            title { romaji english native }
+            synonyms
+            description(asHtml: false)
+            format
+            status
+            episodes
+            duration
+            seasonYear
+            startDate { year }
+            averageScore
+            meanScore
+            popularity
+            genres
+            coverImage { large extraLarge }
+            bannerImage
+            siteUrl
+            studios(isMain: true) { nodes { name } }
+            characters(page: 1, perPage: 10, sort: ROLE) {
+              edges {
+                role
+                node { id name { full } image { medium } }
+                voiceActors(language: JAPANESE) {
+                  name { full }
+                  image { medium }
+                }
+              }
+            }
+          }
+        }
+      }`;
+
+    const year = String(movie?.year || '').match(/\d{4}/)?.[0] || '';
+    const titles = this._omdbTitleCandidates(movie);
+    let best = null;
+
+    for (const title of titles) {
+      const data = await this._fetchAniList(query, { search: title }, `search:v1:${this._titleKey(title)}`);
+      const ranked = (data?.Page?.media || [])
+        .map(media => ({ media, score: this._scoreAniListResult(title, year, media) }))
+        .sort((a, b) => b.score - a.score);
+      if (ranked[0] && (!best || ranked[0].score > best.score)) best = ranked[0];
+      if (best?.score >= 96) break;
+    }
+
+    const normalized = best?.score >= 45 ? this._normalizeAniListMedia(best.media) : null;
+    this._anilistCacheSet(cacheKey, normalized);
+    return normalized;
+  },
+
+  async enrichOneWithAniList(movie) {
+    const anilist = await this.getAniListInfo(movie);
+    return {
+      ...movie,
+      anilist,
+      poster_url: movie?.poster_url || anilist?.cover_url || '',
+      thumb_url: movie?.thumb_url || movie?.poster_url || anilist?.banner_url || anilist?.cover_url || '',
+    };
+  },
+
+  async enrichWithAniList(items, options = {}) {
+    const limit = options.limit || 12;
+    return Promise.all((items || []).map((movie, index) => {
+      if (index >= limit) return movie;
+      return this.enrichOneWithAniList(movie).catch(() => movie);
+    }));
   },
 
   async getTmdbInfo(movie) {

@@ -5,10 +5,12 @@
 ## Tính năng chính
 
 - Trang chủ có hero phim nổi bật, bộ lọc theo thể loại, quốc gia, loại phim và tìm kiếm.
+- Có bảng xếp hạng gọn trên trang chủ: phim trending tuần từ TMDB, anime trending tuần và anime season từ AniList, có nút xem thêm.
 - Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
 - Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
 - Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
-- Hiển thị thông tin bổ sung từ TMDB và OMDb: điểm TMDB, điểm IMDb, mô tả, thể loại, poster/backdrop và diễn viên.
+- Hỗ trợ danh sách **Xem sau** và **Đã thích**, lưu bằng `localStorage` và xuất/nhập cùng dữ liệu lịch sử.
+- Hiển thị thông tin bổ sung từ TMDB, OMDb và AniList: điểm TMDB, điểm IMDb, điểm AniList, mô tả, thể loại, poster/backdrop, diễn viên và nhân vật/lồng tiếng anime.
 - Lịch sử xem lưu trên thiết bị bằng `localStorage`, có xuất/nhập file JSON.
 - Đăng nhập/đăng ký cục bộ bằng `localStorage`.
 - Giao diện tối, responsive cho desktop và mobile.
@@ -22,6 +24,7 @@
 | Server 3 - NguonC | Danh sách phim, tìm kiếm, chi tiết, tập phim | `https://phim.nguonc.com` |
 | TMDB | Metadata phim, điểm TMDB, mô tả, thể loại, diễn viên | `https://api.themoviedb.org/3` |
 | OMDb | Điểm IMDb và metadata phụ | `https://www.omdbapi.com` |
+| AniList | Metadata anime, điểm AniList, studio, nhân vật và diễn viên lồng tiếng | `https://graphql.anilist.co` |
 
 ## Cấu trúc thư mục
 
@@ -36,7 +39,7 @@ DragonFilm/
 │   ├── style.css       # Style chung cho trang chủ, lịch sử, modal, responsive
 │   └── player.css      # Style riêng cho trang xem phim/player
 └── js/
-    ├── api.js          # Layer gọi API phim, TMDB, OMDb, normalize dữ liệu
+    ├── api.js          # Layer gọi API phim, TMDB, OMDb, AniList, normalize dữ liệu
     ├── auth.js         # Auth localStorage, history, toast, menu
     ├── main.js         # Logic trang chủ, lọc, tìm kiếm, render card/hero
     ├── player.js       # Logic player, server/tập, lịch sử xem, next tập
@@ -80,8 +83,9 @@ API key đang được cấu hình trong [js/api.js](js/api.js):
 
 - `API.tmdb.apiKey`: key TMDB.
 - `API.omdb.apiKey`: key OMDb.
+- AniList dùng GraphQL public endpoint cho dữ liệu anime, không cần API key với các truy vấn public hiện tại.
 
-Vì đây là web tĩnh chạy hoàn toàn ở frontend, các key đặt trong JavaScript sẽ hiển thị công khai khi deploy. Nếu dùng production nghiêm túc, nên chuyển TMDB/OMDb request qua backend/proxy để bảo vệ key.
+Vì đây là web tĩnh chạy hoàn toàn ở frontend, các key đặt trong JavaScript sẽ hiển thị công khai khi deploy. Nếu dùng production nghiêm túc, nên chuyển TMDB/OMDb request qua backend/proxy để bảo vệ key và gom cache metadata.
 
 ## Ghi chú khi xem phim
 
@@ -98,7 +102,9 @@ Dự án dùng `localStorage` để lưu:
 - Tài khoản local.
 - Lịch sử xem.
 - Thời gian xem dở.
-- Cache metadata OMDb/TMDB.
+- Danh sách xem sau.
+- Danh sách phim yêu thích.
+- Cache metadata OMDb/TMDB/AniList.
 
 Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi đổi thiết bị, dùng chức năng **Xuất lịch sử** và **Nhập lịch sử** trong `history.html`.
 
@@ -116,9 +122,9 @@ Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi
 - Thử tập khác nếu phim bộ.
 - Bật `1.1.1.1` hoặc VPN.
 
-**Không hiện điểm TMDB/IMDb hoặc diễn viên**
+**Không hiện điểm TMDB/IMDb/AniList hoặc diễn viên**
 
-- TMDB/OMDb có thể không tìm được phim tương ứng theo tên/năm.
+- TMDB/OMDb/AniList có thể không tìm được phim tương ứng theo tên/năm.
 - API key có thể hết quota hoặc request bị chặn.
 - Cache localStorage có thể cũ; thử xoá cache trình duyệt và tải lại.
 
@@ -127,4 +133,3 @@ Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi
 - Đây là dự án frontend tĩnh, không có backend và không có bước build.
 - Khi sửa CSS/JS, tăng query version trong HTML như `style.css?v=...` hoặc `main.js?v=...` để tránh cache trình duyệt.
 - Khi thêm nguồn phim mới, cập nhật `API.servers` trong `js/api.js` và đảm bảo normalize dữ liệu về cùng format.
-

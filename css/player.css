@@ -361,6 +361,30 @@
   background: var(--bg3); border: 1px solid var(--border);
   color: var(--text-dim); padding: 3px 10px; border-radius: 4px;
 }
+.movie-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 14px;
+}
+.movie-library-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg3);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--font-title);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 11px;
+  transition: var(--transition);
+}
+.movie-library-btn:hover,
+.movie-library-btn.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--accent-ink);
+}
 .movie-desc {
   font-size: 14px; color: var(--text-dim); line-height: 1.7;
 }

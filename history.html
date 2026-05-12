@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lịch Sử Xem - DragonFilm</title>
   <link rel="icon" href="assets/logo.png?v=10" type="image/png">
-<link rel="stylesheet" href="css/style.css?v=16">
+<link rel="stylesheet" href="css/style.css?v=19">
 </head>
 <body>
 
@@ -69,12 +69,18 @@
           <p class="history-note">Lịch sử xem và thời gian xem dở được lưu tự động trên thiết bị này. Khi đổi thiết bị, hãy xuất file lịch sử ra rồi nhập lại trên thiết bị mới.</p>
         </div>
         <div class="history-actions">
-          <button class="history-action-btn" id="btn-export-history" type="button">Xuất lịch sử</button>
-          <button class="history-action-btn" id="btn-import-history" type="button">Nhập lịch sử</button>
+          <button class="history-action-btn" id="btn-export-history" type="button">Xuất dữ liệu</button>
+          <button class="history-action-btn" id="btn-import-history" type="button">Nhập dữ liệu</button>
           <button class="clear-btn" id="btn-clear" type="button">Xóa Tất Cả</button>
           <input id="history-import-file" type="file" accept="application/json,.json" hidden>
         </div>
       </div>
+    </div>
+
+    <div class="history-tabs">
+      <button class="history-tab active" type="button" data-history-tab="history">Lịch sử</button>
+      <button class="history-tab" type="button" data-history-tab="watchLater">Xem sau</button>
+      <button class="history-tab" type="button" data-history-tab="liked">Đã thích</button>
     </div>
 
     <div id="history-list"></div>
@@ -133,22 +139,52 @@
 
 <div id="toast-container"></div>
 
-<script src="js/api.js?v=11"></script>
-<script src="js/auth.js?v=10"></script>
+<script src="js/api.js?v=17"></script>
+<script src="js/auth.js?v=11"></script>
 <script>
+let activeHistoryTab = 'history';
+
 document.addEventListener('DOMContentLoaded', () => {
-  renderHistory();
+  bindHistoryTabs();
+  renderActiveHistoryTab();
   bindHistoryImportExport();
+  document.getElementById('history-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.history-remove-btn');
+    if (!btn) return;
+    MovieLibrary.remove(btn.dataset.listType, { slug: btn.dataset.slug, _server: btn.dataset.server });
+    renderActiveHistoryTab();
+    showToast('Đã xóa khỏi danh sách');
+  });
 
   document.getElementById('btn-clear')?.addEventListener('click', () => {
-    if (confirm('Xóa toàn bộ lịch sử xem?')) {
-      History.clear();
-      Object.keys(localStorage).filter(k => k.startsWith('xvl_time_')).forEach(k => localStorage.removeItem(k));
-      renderHistory();
-      showToast('Đã xóa lịch sử xem');
+    const label = activeHistoryTab === 'history' ? 'lịch sử xem' : (activeHistoryTab === 'watchLater' ? 'danh sách xem sau' : 'danh sách phim yêu thích');
+    if (confirm(`Xóa toàn bộ ${label}?`)) {
+      if (activeHistoryTab === 'history') {
+        History.clear();
+        Object.keys(localStorage).filter(k => k.startsWith('xvl_time_')).forEach(k => localStorage.removeItem(k));
+      } else {
+        MovieLibrary.clear(activeHistoryTab);
+      }
+      renderActiveHistoryTab();
+      showToast(`Đã xóa ${label}`);
     }
   });
 });
+
+function bindHistoryTabs() {
+  document.querySelectorAll('.history-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeHistoryTab = tab.dataset.historyTab || 'history';
+      document.querySelectorAll('.history-tab').forEach(btn => btn.classList.toggle('active', btn === tab));
+      renderActiveHistoryTab();
+    });
+  });
+}
+
+function renderActiveHistoryTab() {
+  if (activeHistoryTab === 'history') renderHistory();
+  else renderMovieList(activeHistoryTab);
+}
 
 function bindHistoryImportExport() {
   const importInput = document.getElementById('history-import-file');
@@ -165,18 +201,19 @@ function exportHistory() {
     exportedAt: new Date().toISOString(),
     history: History.get(),
     resumeTimes: getResumeTimes(),
+    movieLibrary: MovieLibrary.exportData(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const date = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `xem-voi-long-history-${date}.json`;
+  a.download = `xem-voi-long-data-${date}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast('Đã xuất lịch sử xem');
+  showToast('Đã xuất dữ liệu cá nhân');
 }
 
 function importHistoryFile(event) {
@@ -193,8 +230,9 @@ function importHistoryFile(event) {
 
       mergeHistory(importedHistory);
       restoreResumeTimes(payload.resumeTimes || {});
-      renderHistory();
-      showToast('Đã nhập lịch sử xem');
+      if (payload.movieLibrary) MovieLibrary.importData(payload.movieLibrary);
+      renderActiveHistoryTab();
+      showToast('Đã nhập dữ liệu cá nhân');
     } catch (error) {
       showToast('File lịch sử không hợp lệ', 'error');
     }
@@ -251,10 +289,68 @@ function mergeHistory(importedHistory) {
   History.save(merged);
 }
 
+function movieListHref(m) {
+  const params = new URLSearchParams({
+    slug: m.slug,
+    server: m._server || 'kkphim',
+  });
+  const sources = Object.entries(m._serverSlugs || {})
+    .filter(([, slug]) => slug)
+    .map(([server, slug]) => `${server}:${encodeURIComponent(slug)}`)
+    .join('|');
+  if (sources) params.set('sources', sources);
+  return `movie.html?${params.toString()}`;
+}
+
+function renderMovieList(type) {
+  const list = MovieLibrary.get(type);
+  const el = document.getElementById('history-list');
+  const countEl = document.getElementById('history-count');
+  const title = type === 'watchLater' ? 'Xem Sau' : 'Phim Đã Thích';
+  const emptyText = type === 'watchLater' ? 'Chưa có phim xem sau' : 'Chưa có phim yêu thích';
+  document.querySelector('.page-header-title').textContent = title;
+  document.querySelector('.history-note').textContent = type === 'watchLater'
+    ? 'Danh sách xem sau được lưu trên thiết bị này. Bạn có thể xuất file để chuyển sang thiết bị khác.'
+    : 'Danh sách phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất file để sao lưu hoặc chuyển thiết bị.';
+  if (countEl) countEl.textContent = list.length ? `${list.length} phim` : 'Chưa có phim nào';
+  if (!el) return;
+
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="icon" style="font-size:48px;opacity:0.3">♡</div>
+      <h3>${emptyText}</h3>
+      <p>Bấm nút trên poster hoặc trang xem phim để lưu vào đây.</p>
+      <a href="index.html" style="display:inline-block;margin-top:16px" class="btn-primary">Tìm Phim</a>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = list.map(m => {
+    const date = new Date(m.addedAt || Date.now());
+    const dateStr = date.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const serverLabel = m._server === 'ophim' ? 'Server 2' : m._server === 'nguonc' ? 'Server 3' : 'Server 1';
+    const imgEl = m.poster_url
+      ? `<img class="history-poster" src="${esc(m.poster_url)}" alt="${esc(m.name)}" onerror="this.style.display='none'">`
+      : `<div class="history-poster" style="background:var(--bg3);display:flex;align-items:center;justify-content:center;opacity:0.4">♡</div>`;
+
+    return `<div class="history-item">
+      ${imgEl}
+      <a class="history-info" href="${esc(movieListHref(m))}">
+        <div class="history-title">${esc(m.name)}</div>
+        <div class="history-meta">${m.year ? esc(m.year) + ' · ' : ''}${esc(serverLabel)} · đã lưu ${dateStr}</div>
+        ${m.origin_name ? `<div class="history-detail-row"><span>${esc(m.origin_name)}</span></div>` : ''}
+      </a>
+      <button class="history-remove-btn" type="button" data-list-type="${esc(type)}" data-slug="${esc(m.slug)}" data-server="${esc(m._server || 'kkphim')}">Xóa</button>
+    </div>`;
+  }).join('');
+}
+
 function renderHistory() {
   const list    = History.get();
   const el      = document.getElementById('history-list');
   const countEl = document.getElementById('history-count');
+  document.querySelector('.page-header-title').textContent = 'Lịch Sử Xem';
+  document.querySelector('.history-note').textContent = 'Lịch sử xem và thời gian xem dở được lưu tự động trên thiết bị này. Khi đổi thiết bị, hãy xuất file dữ liệu ra rồi nhập lại trên thiết bị mới.';
   if (!el) return;
 
   if (countEl) countEl.textContent = list.length ? `${list.length} phim đã xem` : 'Chưa có phim nào';

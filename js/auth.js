@@ -62,6 +62,99 @@ const History = {
   clear() { localStorage.removeItem(this._key); }
 };
 
+// ---- Personal movie lists ----
+const MovieLibrary = {
+  keys: {
+    watchLater: 'xvl_watch_later',
+    liked: 'xvl_liked_movies',
+  },
+  labels: {
+    watchLater: 'Xem sau',
+    liked: 'Đã thích',
+  },
+  get(type) {
+    try {
+      return JSON.parse(localStorage.getItem(this.keys[type])) || [];
+    } catch {
+      return [];
+    }
+  },
+  save(type, list) {
+    if (!this.keys[type]) return;
+    localStorage.setItem(this.keys[type], JSON.stringify(list || []));
+  },
+  keyOf(movie) {
+    if (!movie) return '';
+    return `${movie._server || 'kkphim'}:${movie.slug || movie.id || movie.name || ''}`;
+  },
+  normalize(movie) {
+    const serverSlugs = movie?._serverSlugs || (movie?.slug ? { [movie._server || 'kkphim']: movie.slug } : {});
+    return {
+      slug: movie?.slug || '',
+      name: movie?.name || movie?.title || movie?.origin_name || '',
+      origin_name: movie?.origin_name || movie?.original_title || '',
+      poster_url: movie?.poster_url || movie?.thumb_url || movie?.tmdb?.poster_url || movie?.omdb?.poster || movie?.anilist?.cover_url || '',
+      year: movie?.year || movie?.tmdb?.year || movie?.omdb?.year || movie?.anilist?.season_year || '',
+      _server: movie?._server || Object.keys(serverSlugs)[0] || 'kkphim',
+      _sources: movie?._sources || Object.keys(serverSlugs),
+      _serverSlugs: serverSlugs,
+      addedAt: Number(movie?.addedAt || Date.now()),
+    };
+  },
+  has(type, movie) {
+    const key = this.keyOf(movie);
+    return Boolean(key && this.get(type).some(item => this.keyOf(item) === key));
+  },
+  add(type, movie) {
+    if (!this.keys[type] || !movie?.slug) return false;
+    const item = this.normalize(movie);
+    const key = this.keyOf(item);
+    const list = this.get(type).filter(existing => this.keyOf(existing) !== key);
+    list.unshift(item);
+    this.save(type, list.slice(0, 200));
+    return true;
+  },
+  remove(type, movie) {
+    if (!this.keys[type]) return false;
+    const key = this.keyOf(movie);
+    this.save(type, this.get(type).filter(item => this.keyOf(item) !== key));
+    return true;
+  },
+  toggle(type, movie) {
+    if (this.has(type, movie)) {
+      this.remove(type, movie);
+      return false;
+    }
+    this.add(type, movie);
+    return true;
+  },
+  clear(type) {
+    if (this.keys[type]) localStorage.removeItem(this.keys[type]);
+  },
+  exportData() {
+    return {
+      watchLater: this.get('watchLater'),
+      liked: this.get('liked'),
+    };
+  },
+  importData(data = {}) {
+    ['watchLater', 'liked'].forEach(type => {
+      const incoming = Array.isArray(data[type]) ? data[type] : [];
+      const byKey = new Map();
+      [...this.get(type), ...incoming].forEach(item => {
+        const normalized = this.normalize(item);
+        const key = this.keyOf(normalized);
+        if (!key || !normalized.slug) return;
+        const existing = byKey.get(key);
+        if (!existing || Number(normalized.addedAt || 0) > Number(existing.addedAt || 0)) {
+          byKey.set(key, normalized);
+        }
+      });
+      this.save(type, [...byKey.values()].sort((a, b) => Number(b.addedAt || 0) - Number(a.addedAt || 0)));
+    });
+  },
+};
+
 // ---- Resume time ----
 const ResumeTime = {
   key(slug) { return `xvl_time_${slug}`; },

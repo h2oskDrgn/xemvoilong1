@@ -54,6 +54,14 @@ const TYPES = [
   { name: 'Hoạt Hình', slug: 'hoat-hinh' }, { name: 'TV Show', slug: 'tv-shows' },
 ];
 
+const RANKING_LIMIT = 20;
+const RANKING_COLLAPSED = 5;
+const rankingState = {
+  tmdbWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-weekly-rank' },
+  animeWeekly: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-weekly-rank' },
+  animeSeason: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-season-rank' },
+};
+
 // ---- Card renderer ----
 function allowedServersForCurrentMode() {
   return ['search', 'genre'].includes(state.mode) ? HOME_SEARCH_SERVERS : HOME_RECOMMEND_SERVERS;
@@ -66,7 +74,9 @@ function getServerSlugs(m, allowedServers = allowedServersForCurrentMode()) {
 function buildMovieHref(m, allowedServers = allowedServersForCurrentMode()) {
   const serverSlugs = getServerSlugs(m, allowedServers);
   const sources = (m._sources?.length ? m._sources : Object.keys(serverSlugs)).filter(server => allowedServers.includes(server));
-  const preferredServer = allowedServers.find(server => serverSlugs[server]) || m._server || sources[0] || allowedServers[0];
+  const preferredServer = (m._server && allowedServers.includes(m._server) && serverSlugs[m._server])
+    ? m._server
+    : allowedServers.find(server => serverSlugs[server]) || sources[0] || allowedServers[0];
   const hrefParams = new URLSearchParams({
     slug: serverSlugs[preferredServer] || m.slug,
     server: preferredServer,
@@ -86,6 +96,30 @@ function renderSourceBadges(m, allowedServers = allowedServersForCurrentMode()) 
   return sourceBadges;
 }
 
+function movieLibraryDataset(m) {
+  const sources = encodeSourceMap(getServerSlugs(m));
+  return `data-slug="${escHtml(m.slug || '')}" data-server="${escHtml(m._server || API.currentServer)}" data-name="${escHtml(m.name || '')}" data-origin="${escHtml(m.origin_name || '')}" data-poster="${escHtml(m.poster_url || m.thumb_url || '')}" data-year="${escHtml(m.year || '')}" data-sources="${escHtml(sources)}"`;
+}
+
+function libraryMovieFromElement(el) {
+  const serverSlugs = {};
+  String(el?.dataset?.sources || '').split('|').forEach(part => {
+    const [server, ...slugParts] = part.split(':');
+    if (server && slugParts.length) serverSlugs[server] = decodeURIComponent(slugParts.join(':'));
+  });
+  if (el?.dataset?.server && el?.dataset?.slug) serverSlugs[el.dataset.server] = el.dataset.slug;
+  return {
+    slug: el?.dataset?.slug || '',
+    name: el?.dataset?.name || '',
+    origin_name: el?.dataset?.origin || '',
+    poster_url: el?.dataset?.poster || '',
+    year: el?.dataset?.year || '',
+    _server: el?.dataset?.server || API.currentServer,
+    _sources: Object.keys(serverSlugs),
+    _serverSlugs: serverSlugs,
+  };
+}
+
 function formatOmdbBadge(m) {
   return m.omdb?.ratingValue ? `<span class="rating-chip">IMDb ${escHtml(m.omdb.imdbRating)}</span>` : '';
 }
@@ -94,12 +128,17 @@ function formatTmdbBadge(m) {
   return m.tmdb?.vote_average ? `<span class="rating-chip">TMDB ${m.tmdb.vote_average.toFixed(1)}</span>` : '';
 }
 
+function formatAniListBadge(m) {
+  return m.anilist?.average_score ? `<span class="rating-chip">AniList ${m.anilist.average_score}%</span>` : '';
+}
+
 function formatRatingBadges(m) {
-  return `${formatTmdbBadge(m)}${formatOmdbBadge(m)}`;
+  return `${formatAniListBadge(m)}${formatTmdbBadge(m)}${formatOmdbBadge(m)}`;
 }
 
 function formatRatingText(m) {
   const ratings = [
+    m.anilist?.average_score ? `AniList ${m.anilist.average_score}%` : '',
     m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : '',
     m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : '',
   ].filter(Boolean);
@@ -114,9 +153,13 @@ function renderCard(m) {
   const sourceBadges = renderSourceBadges(m);
   const rankBadge = m._rank ? `<span class="rank-chip">#${m._rank}</span>` : '';
   const ratingBadge = formatRatingBadges(m);
+  const anilistGenre = m.anilist?.genres?.[0] || '';
   const tmdbGenre = m.tmdb?.genres?.[0]?.name || '';
   const omdbGenre = m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : '';
-  const genreText = tmdbGenre || omdbGenre;
+  const genreText = anilistGenre || tmdbGenre || omdbGenre;
+  const libraryData = movieLibraryDataset(m);
+  const isWatchLater = typeof MovieLibrary !== 'undefined' && MovieLibrary.has('watchLater', m);
+  const isLiked = typeof MovieLibrary !== 'undefined' && MovieLibrary.has('liked', m);
   const imgEl = poster
     ? `<img src="${escHtml(poster)}" alt="${escHtml(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=movie-poster-placeholder><div>🎬</div><span>${escHtml(m.name)}</span></div>'">`
     : `<div class="movie-poster-placeholder"><div>🎬</div><span>${escHtml(m.name)}</span></div>`;
@@ -128,6 +171,10 @@ function renderCard(m) {
       ${typeLabel ? `<div class="movie-badge ${m.type}">${typeLabel}</div>` : ''}
       ${ep ? `<div class="movie-badge ep">${ep.length > 10 ? ep.slice(0,9)+'…' : ep}</div>` : ''}
       ${m.quality ? `<div class="movie-quality">${escHtml(m.quality)}</div>` : ''}
+      <div class="movie-actions">
+        <button class="movie-action-btn${isWatchLater ? ' active' : ''}" type="button" data-library-action="watchLater" ${libraryData} title="Lưu xem sau" aria-label="Lưu xem sau">＋</button>
+        <button class="movie-action-btn${isLiked ? ' active' : ''}" type="button" data-library-action="liked" ${libraryData} title="Thích phim" aria-label="Thích phim">♡</button>
+      </div>
     </div>
     <div class="movie-info">
       <div class="movie-title">${escHtml(m.name)}</div>
@@ -169,9 +216,160 @@ function updateSectionTitle() {
 }
 
 function resultInfoText(count) {
-  if (['search', 'genre'].includes(state.mode)) return `${count} phim từ SV 1, SV 2 và SV 3 · kèm thông tin TMDB nếu có`;
+  if (['search', 'genre'].includes(state.mode)) return `${count} phim từ SV 1, SV 2 và SV 3 · kèm TMDB/IMDb/AniList nếu có`;
   if (state.mode === 'latest') return `${count} phim từ SV 1 và SV 3 · xếp theo điểm TMDB`;
-  return `${count} phim từ SV 1 và SV 3 · ưu tiên thông tin TMDB`;
+  return `${count} phim từ SV 1 và SV 3 · ưu tiên thông tin TMDB/IMDb/AniList`;
+}
+
+// ---- Compact weekly rankings ----
+function rankingTitle(item, type) {
+  return type === 'anime'
+    ? (item.title_english || item.title_romaji || item.title_native || 'Anime')
+    : (item.title || item.original_title || 'Phim');
+}
+
+function renderRankingRows(items, type, expanded = false) {
+  if (!items?.length) {
+    return '<div class="weekly-rank-empty">Chưa có dữ liệu.</div>';
+  }
+
+  return items.slice(0, expanded ? items.length : RANKING_COLLAPSED).map((item, index) => {
+    const title = rankingTitle(item, type);
+    const poster = type === 'anime'
+      ? (item.cover_url || item.banner_url || '')
+      : (item.poster_url || item.backdrop_url || '');
+    const score = type === 'anime'
+      ? (item.average_score ? `${item.average_score}%` : `${Math.round(item.popularity || 0)}`)
+      : (item.vote_average ? item.vote_average.toFixed(1) : `${Math.round(item.popularity || 0)}`);
+    const meta = type === 'anime'
+      ? (item.season_year || item.format || '')
+      : (item.year || 'TMDB');
+    const img = poster
+      ? `<img src="${escHtml(poster)}" alt="${escHtml(title)}" loading="lazy">`
+      : '<span class="weekly-rank-poster-placeholder"></span>';
+    const year = type === 'anime' ? (item.season_year || '') : (item.year || '');
+
+    return `<button class="weekly-rank-row" type="button" data-rank-title="${escHtml(title)}" data-rank-year="${escHtml(year)}">
+      <span class="weekly-rank-no">${index + 1}.</span>
+      <span class="weekly-rank-poster">${img}</span>
+      <span class="weekly-rank-copy">
+        <strong>${escHtml(title)}</strong>
+        <em>${escHtml(meta)}</em>
+      </span>
+      <span class="weekly-rank-score">${escHtml(score)}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderRankingPanel(key) {
+  const panel = rankingState[key];
+  const wrap = document.getElementById(panel?.wrapId);
+  const btn = document.querySelector(`.weekly-rank-more[data-rank-key="${key}"]`);
+  if (!panel || !wrap) return;
+  wrap.innerHTML = renderRankingRows(panel.items, panel.type, panel.expanded);
+  if (btn) {
+    const canExpand = panel.items.length > RANKING_COLLAPSED;
+    btn.hidden = !canExpand;
+    btn.textContent = panel.expanded ? 'Thu gọn' : `Xem thêm ${panel.items.length}`;
+  }
+}
+
+async function loadWeeklyRankings() {
+  const tmdbWrap = document.getElementById('tmdb-weekly-rank');
+  const animeWeeklyWrap = document.getElementById('anilist-weekly-rank');
+  const animeWrap = document.getElementById('anilist-season-rank');
+  const seasonLabel = document.getElementById('anilist-season-label');
+
+  if (tmdbWrap && typeof API.getTmdbWeeklyRanking === 'function') {
+    API.getTmdbWeeklyRanking(RANKING_LIMIT)
+      .then(items => {
+        rankingState.tmdbWeekly.items = items || [];
+        renderRankingPanel('tmdbWeekly');
+      })
+      .catch(() => { tmdbWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được TMDB.</div>'; });
+  }
+
+  if (animeWeeklyWrap && typeof API.getAniListWeeklyAnimeRanking === 'function') {
+    API.getAniListWeeklyAnimeRanking(RANKING_LIMIT)
+      .then(items => {
+        rankingState.animeWeekly.items = items || [];
+        renderRankingPanel('animeWeekly');
+      })
+      .catch(() => { animeWeeklyWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được AniList.</div>'; });
+  }
+
+  if (animeWrap && typeof API.getAniListSeasonAnimeRanking === 'function') {
+    API.getAniListSeasonAnimeRanking(RANKING_LIMIT)
+      .then(result => {
+        if (seasonLabel && result?.label && result?.year) {
+          seasonLabel.textContent = `${result.label} ${result.year}`;
+        }
+        rankingState.animeSeason.items = result?.items || [];
+        renderRankingPanel('animeSeason');
+      })
+      .catch(() => { animeWrap.innerHTML = '<div class="weekly-rank-empty">Không tải được AniList.</div>'; });
+  }
+}
+
+async function openRankingMovie(btn) {
+  const title = btn?.dataset?.rankTitle || '';
+  if (!title || btn.disabled) return;
+  const originalText = btn.querySelector('.weekly-rank-score')?.textContent || '';
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  const scoreEl = btn.querySelector('.weekly-rank-score');
+  if (scoreEl) scoreEl.textContent = '...';
+  showToast(`Đang tìm nguồn phát cho "${title}"...`, 'info');
+
+  try {
+    const found = await API.findPlayableMovie(title, {
+      year: btn.dataset.rankYear || '',
+      serverIds: HOME_SEARCH_SERVERS,
+    });
+    if (!found) {
+      showToast(`"${title}" chưa có trong 3 nguồn phát.`, 'error');
+      return;
+    }
+    window.location.href = buildMovieHref(found, HOME_SEARCH_SERVERS);
+  } catch (err) {
+    showToast('Không kiểm tra được nguồn phát, vui lòng thử lại.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    if (scoreEl) scoreEl.textContent = originalText;
+  }
+}
+
+function initRankingInteractions() {
+  document.getElementById('weekly-rankings')?.addEventListener('click', (e) => {
+    const moreBtn = e.target.closest('.weekly-rank-more');
+    if (moreBtn) {
+      const key = moreBtn.dataset.rankKey;
+      if (rankingState[key]) {
+        rankingState[key].expanded = !rankingState[key].expanded;
+        renderRankingPanel(key);
+      }
+      return;
+    }
+
+    const row = e.target.closest('.weekly-rank-row');
+    if (row) openRankingMovie(row);
+  });
+}
+
+function initMovieLibraryActions() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.movie-action-btn');
+    if (!btn || typeof MovieLibrary === 'undefined') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const type = btn.dataset.libraryAction;
+    const movie = libraryMovieFromElement(btn);
+    const added = MovieLibrary.toggle(type, movie);
+    btn.classList.toggle('active', added);
+    const label = type === 'liked' ? 'phim yêu thích' : 'danh sách xem sau';
+    showToast(added ? `Đã thêm vào ${label}` : `Đã bỏ khỏi ${label}`);
+  });
 }
 
 // ---- Load movies ----
@@ -215,6 +413,14 @@ async function loadMovies(resetPage = true) {
       });
     } catch (e) {
       console.warn('[TMDB] Không thể enrich danh sách:', e);
+    }
+
+    try {
+      result.items = await API.enrichWithAniList(result.items, {
+        limit: state.mode === 'search' ? 12 : 18,
+      });
+    } catch (e) {
+      console.warn('[AniList] Không thể enrich danh sách:', e);
     }
 
     try {
@@ -486,10 +692,10 @@ function updateHeroFromMovies(items) {
   const picks = (items || []).filter(movie => movie?.name).slice(0, slides.length);
   picks.forEach((m, index) => {
     const slide = slides[index];
-    const bg = m.tmdb?.backdrop_url || m.tmdb?.poster_url || m.omdb?.poster || m.poster_url || m.thumb_url;
+    const bg = m.anilist?.banner_url || m.tmdb?.backdrop_url || m.anilist?.cover_url || m.tmdb?.poster_url || m.omdb?.poster || m.poster_url || m.thumb_url;
     const ratingText = formatRatingText(m);
-    const genreText = m.tmdb?.genres?.[0]?.name || (m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m));
-    const desc = m.tmdb?.overview || (m.omdb?.plot && m.omdb.plot !== 'N/A'
+    const genreText = m.anilist?.genres?.[0] || m.tmdb?.genres?.[0]?.name || (m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m));
+    const desc = m.anilist?.description || m.tmdb?.overview || (m.omdb?.plot && m.omdb.plot !== 'N/A'
       ? m.omdb.plot
       : `Đề xuất từ DragonFilm, có trên ${renderSourceBadges(m, HOME_RECOMMEND_SERVERS).replace(/<[^>]+>/g, ' ').trim() || 'SV 1 và SV 3'}.`);
 
@@ -542,9 +748,11 @@ function initHero() {
 function syncHeroVisibility() {
   const hero = document.querySelector('.hero');
   const movies = document.getElementById('movies');
+  const rankings = document.getElementById('weekly-rankings');
   if (!hero) return;
   const isFilteredView = state.mode !== 'latest';
   hero.classList.toggle('is-hidden', isFilteredView);
+  rankings?.classList.toggle('is-hidden', isFilteredView);
   movies?.classList.toggle('filtered-view', isFilteredView);
 }
 
@@ -553,6 +761,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initFilters();
   initSearch();
   initHero();
+  initRankingInteractions();
+  initMovieLibraryActions();
+  loadWeeklyRankings();
   syncHeroVisibility();
   loadMovies();
 });
