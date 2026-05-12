@@ -106,7 +106,7 @@ function renderMovieInfo(m) {
   const omdbRating = m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : '';
   const tmdbRating = m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : '';
   const tmdbRuntime = m.tmdb?.runtime ? `${m.tmdb.runtime} phút` : '';
-  set('movie-sub', [m.year || m.tmdb?.year, m.quality, m.lang, tmdbRating || omdbRating, tmdbRuntime, m.origin_name].filter(Boolean).join(' · '));
+  set('movie-sub', [m.year || m.tmdb?.year, m.quality, m.lang, tmdbRating, omdbRating, tmdbRuntime, m.origin_name].filter(Boolean).join(' · '));
   set('movie-desc', m.tmdb?.overview || m.description || m.omdb?.plot || '');
 
   const posterEl = document.getElementById('movie-poster');

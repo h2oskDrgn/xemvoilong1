@@ -94,6 +94,18 @@ function formatTmdbBadge(m) {
   return m.tmdb?.vote_average ? `<span class="rating-chip">TMDB ${m.tmdb.vote_average.toFixed(1)}</span>` : '';
 }
 
+function formatRatingBadges(m) {
+  return `${formatTmdbBadge(m)}${formatOmdbBadge(m)}`;
+}
+
+function formatRatingText(m) {
+  const ratings = [
+    m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : '',
+    m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : '',
+  ].filter(Boolean);
+  return ratings.join(' · ') || 'TMDB';
+}
+
 function renderCard(m) {
   const poster = m.poster_url || m.thumb_url || '';
   const ep = m.episode_current || '';
@@ -101,7 +113,7 @@ function renderCard(m) {
   const href = buildMovieHref(m);
   const sourceBadges = renderSourceBadges(m);
   const rankBadge = m._rank ? `<span class="rank-chip">#${m._rank}</span>` : '';
-  const ratingBadge = formatTmdbBadge(m) || formatOmdbBadge(m);
+  const ratingBadge = formatRatingBadges(m);
   const tmdbGenre = m.tmdb?.genres?.[0]?.name || '';
   const omdbGenre = m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : '';
   const genreText = tmdbGenre || omdbGenre;
@@ -207,7 +219,7 @@ async function loadMovies(resetPage = true) {
 
     try {
       result.items = await API.enrichWithOmdb(result.items, {
-        limit: state.mode === 'search' ? 8 : 12,
+        limit: state.mode === 'search' ? 12 : 24,
         sort: false,
         rank: false,
       });
@@ -475,7 +487,7 @@ function updateHeroFromMovies(items) {
   picks.forEach((m, index) => {
     const slide = slides[index];
     const bg = m.tmdb?.backdrop_url || m.tmdb?.poster_url || m.omdb?.poster || m.poster_url || m.thumb_url;
-    const ratingText = m.tmdb?.vote_average ? `TMDB ${m.tmdb.vote_average.toFixed(1)}` : (m.omdb?.ratingValue ? `IMDb ${m.omdb.imdbRating}` : 'TMDB');
+    const ratingText = formatRatingText(m);
     const genreText = m.tmdb?.genres?.[0]?.name || (m.omdb?.genre ? m.omdb.genre.split(',')[0].trim() : localCategoryLabel(m));
     const desc = m.tmdb?.overview || (m.omdb?.plot && m.omdb.plot !== 'N/A'
       ? m.omdb.plot
