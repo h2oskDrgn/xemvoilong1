@@ -1,7 +1,7 @@
 const HISTORY_TAB_TYPES = ['history', 'watchLater', 'liked'];
 let activeHistoryTab = 'history';
-const DRAGONFILM_DATA_PREFIXES = ['xvl_', 'dragonfilm_'];
-const DRAGONFILM_MANAGED_STORAGE_KEYS = new Set(['xvl_history', 'xvl_watch_later', 'xvl_liked_movies']);
+const DRAGONFILM_DATA_PREFIXES = ['dragonfilm_'];
+const DRAGONFILM_MANAGED_STORAGE_KEYS = new Set(['dragonfilm_history', 'dragonfilm_watch_later', 'dragonfilm_liked_movies']);
 
 document.addEventListener('DOMContentLoaded', () => {
   activeHistoryTab = getHistoryTabFromHash();
@@ -25,11 +25,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-clear')?.addEventListener('click', () => {
-    const label = activeHistoryTab === 'history' ? 'lịch sử xem' : (activeHistoryTab === 'watchLater' ? 'danh sách xem sau' : 'danh sách phim yêu thích');
+    const label = activeHistoryTab === 'history' ? 'lịch sử xem' : (activeHistoryTab === 'watchLater' ? 'phim xem sau' : 'phim yêu thích');
     if (confirm(`Xóa toàn bộ ${label}?`)) {
       if (activeHistoryTab === 'history') {
         History.clear();
-        Object.keys(localStorage).filter(k => k.startsWith('xvl_time_')).forEach(k => localStorage.removeItem(k));
+        Object.keys(localStorage).filter(k => k.startsWith('dragonfilm_time_')).forEach(k => localStorage.removeItem(k));
       } else {
         MovieLibrary.clear(activeHistoryTab);
       }
@@ -157,7 +157,7 @@ function isDragonFilmStorageKey(key) {
 }
 
 function isManagedDragonFilmStorageKey(key) {
-  return DRAGONFILM_MANAGED_STORAGE_KEYS.has(key) || String(key || '').startsWith('xvl_time_');
+  return DRAGONFILM_MANAGED_STORAGE_KEYS.has(key) || String(key || '').startsWith('dragonfilm_time_');
 }
 
 function restoreDragonFilmStorage(storage) {
@@ -175,7 +175,7 @@ function restoreDragonFilmStorage(storage) {
 function getImportedHistory(payload, storage) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.history)) return payload.history;
-  const storedHistory = parseStoredJson(storage?.xvl_history);
+  const storedHistory = parseStoredJson(storage?.dragonfilm_history);
   return Array.isArray(storedHistory) ? storedHistory : null;
 }
 
@@ -185,8 +185,8 @@ function getImportedResumeTimes(payload, storage) {
     Object.assign(times, payload.resumeTimes);
   }
   Object.entries(storage || {}).forEach(([key, value]) => {
-    if (String(key).startsWith('xvl_time_')) {
-      times[key.replace('xvl_time_', '')] = parseFloat(value) || 0;
+    if (String(key).startsWith('dragonfilm_time_')) {
+      times[key.replace('dragonfilm_time_', '')] = parseFloat(value) || 0;
     }
   });
   return times;
@@ -199,10 +199,10 @@ function getImportedMovieLibrary(payload, storage) {
     : {};
   const watchLater = Array.isArray(directLibrary.watchLater)
     ? directLibrary.watchLater
-    : parseStoredJson(storage?.xvl_watch_later);
+    : parseStoredJson(storage?.dragonfilm_watch_later);
   const liked = Array.isArray(directLibrary.liked)
     ? directLibrary.liked
-    : parseStoredJson(storage?.xvl_liked_movies);
+    : parseStoredJson(storage?.dragonfilm_liked_movies);
 
   if (Array.isArray(watchLater)) library.watchLater = watchLater;
   if (Array.isArray(liked)) library.liked = liked;
@@ -221,9 +221,9 @@ function parseStoredJson(value) {
 function getResumeTimes() {
   const times = {};
   Object.keys(localStorage)
-    .filter(key => key.startsWith('xvl_time_'))
+    .filter(key => key.startsWith('dragonfilm_time_'))
     .forEach(key => {
-      times[key.replace('xvl_time_', '')] = parseFloat(localStorage.getItem(key)) || 0;
+      times[key.replace('dragonfilm_time_', '')] = parseFloat(localStorage.getItem(key)) || 0;
     });
   return times;
 }
@@ -284,12 +284,12 @@ function renderMovieList(type) {
   const list = MovieLibrary.get(type);
   const el = document.getElementById('history-list');
   const countEl = document.getElementById('history-count');
-  const title = type === 'watchLater' ? 'Xem Sau' : 'Phim Yêu Thích';
+  const title = type === 'watchLater' ? 'Phim Xem Sau' : 'Phim Yêu Thích';
   const emptyText = type === 'watchLater' ? 'Chưa có phim xem sau' : 'Chưa có phim yêu thích';
   document.querySelector('.page-header-title').textContent = title;
   document.querySelector('.history-note').textContent = type === 'watchLater'
-    ? 'Danh sách xem sau được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để chuyển sang thiết bị khác.'
-    : 'Danh sách phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để sao lưu hoặc chuyển thiết bị.';
+    ? 'Phim xem sau được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để chuyển sang thiết bị khác.'
+    : 'Phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để sao lưu hoặc chuyển thiết bị.';
   if (countEl) countEl.textContent = list.length ? `${list.length} phim` : 'Chưa có phim nào';
   if (!el) return;
 

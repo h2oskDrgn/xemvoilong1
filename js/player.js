@@ -324,11 +324,11 @@ function renderMovieLibraryActions(movie = PlayerState.movie) {
   const likeActive = MovieLibrary.has('liked', target);
   if (watchBtn) {
     watchBtn.classList.toggle('active', watchActive);
-    watchBtn.textContent = watchActive ? '✓ Đã lưu xem sau' : '＋ Xem sau';
+    watchBtn.textContent = watchActive ? '✓ Phim xem sau' : '＋ Phim xem sau';
   }
   if (likeBtn) {
     likeBtn.classList.toggle('active', likeActive);
-    likeBtn.textContent = likeActive ? '♥ Đã yêu thích' : '♡ Yêu thích';
+    likeBtn.textContent = likeActive ? '♥ Phim yêu thích' : '♡ Phim yêu thích';
   }
 }
 
@@ -339,14 +339,14 @@ function initMovieLibraryActions() {
     if (!movie.slug) return showToast('Phim chưa tải xong, thử lại sau.', 'error');
     const added = MovieLibrary.toggle('watchLater', movie);
     renderMovieLibraryActions();
-    showToast(added ? 'Đã thêm vào danh sách xem sau' : 'Đã bỏ khỏi danh sách xem sau');
+    showToast(added ? 'Đã thêm vào phim xem sau' : 'Đã bỏ khỏi phim xem sau');
   });
   document.getElementById('btn-like-movie')?.addEventListener('click', () => {
     const movie = movieForLibrary();
     if (!movie.slug) return showToast('Phim chưa tải xong, thử lại sau.', 'error');
     const added = MovieLibrary.toggle('liked', movie);
     renderMovieLibraryActions();
-    showToast(added ? 'Đã thêm vào yêu thích' : 'Đã bỏ khỏi yêu thích');
+    showToast(added ? 'Đã thêm vào phim yêu thích' : 'Đã bỏ khỏi phim yêu thích');
   });
 }
 

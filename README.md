@@ -9,7 +9,7 @@
 - Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
 - Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
 - Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
-- Hỗ trợ danh sách **Xem sau** và **Yêu thích**, lưu bằng `localStorage` và xuất/nhập cùng mọi dữ liệu DragonFilm.
+- Hỗ trợ danh sách **Phim xem sau** và **Phim yêu thích**, lưu bằng `localStorage` và xuất/nhập cùng mọi dữ liệu DragonFilm.
 - Hiển thị thông tin bổ sung từ TMDB, OMDb và AniList: điểm TMDB, điểm IMDb, điểm AniList, mô tả, thể loại, poster/backdrop, diễn viên và nhân vật/lồng tiếng anime.
 - Lịch sử xem lưu trên thiết bị bằng `localStorage`, có xuất/nhập file JSON.
 - Đăng nhập/đăng ký cục bộ bằng `localStorage`.
@@ -54,7 +54,7 @@ Dự án không cần build. Có thể mở trực tiếp `index.html`, nhưng n
 Ví dụ với Python:
 
 ```bash
-cd /path/to/xemvoilong1-main
+cd /path/to/dragonfilm-main
 python3 -m http.server 8000
 ```
 
@@ -99,15 +99,15 @@ Vì đây là web tĩnh chạy hoàn toàn ở frontend, các key đặt trong J
 
 Dự án dùng `localStorage` để lưu:
 
-- Server đang chọn: `xvl_server`.
+- Server đang chọn: `dragonfilm_server`.
 - Tài khoản local.
 - Lịch sử xem.
 - Thời gian xem dở.
-- Danh sách xem sau.
-- Danh sách phim yêu thích.
+- Phim xem sau.
+- Phim yêu thích.
 - Cache metadata OMDb/TMDB/AniList.
 
-Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi đổi thiết bị, dùng chức năng **Xuất lịch sử** và **Nhập lịch sử** trong `history.html`.
+Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi đổi thiết bị, dùng chức năng **Xuất mọi dữ liệu** và **Nhập mọi dữ liệu** trong `history.html`.
 
 ## Troubleshooting
 

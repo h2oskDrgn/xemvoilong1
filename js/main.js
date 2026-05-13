@@ -174,8 +174,8 @@ function renderCard(m) {
       ${ep ? `<div class="movie-badge ep">${ep.length > 10 ? ep.slice(0,9)+'…' : ep}</div>` : ''}
       ${m.quality ? `<div class="movie-quality">${escHtml(m.quality)}</div>` : ''}
       <div class="movie-actions">
-        <button class="movie-action-btn${isWatchLater ? ' active' : ''}" type="button" data-library-action="watchLater" ${libraryData} title="Lưu xem sau" aria-label="Lưu xem sau">＋</button>
-        <button class="movie-action-btn${isLiked ? ' active' : ''}" type="button" data-library-action="liked" ${libraryData} title="Yêu thích" aria-label="Yêu thích">♡</button>
+        <button class="movie-action-btn${isWatchLater ? ' active' : ''}" type="button" data-library-action="watchLater" ${libraryData} title="Phim xem sau" aria-label="Phim xem sau">＋</button>
+        <button class="movie-action-btn${isLiked ? ' active' : ''}" type="button" data-library-action="liked" ${libraryData} title="Phim yêu thích" aria-label="Phim yêu thích">♡</button>
       </div>
     </div>
     <div class="movie-info">
@@ -441,7 +441,7 @@ function initMovieLibraryActions() {
     const movie = libraryMovieFromElement(btn);
     const added = MovieLibrary.toggle(type, movie);
     btn.classList.toggle('active', added);
-    const label = type === 'liked' ? 'yêu thích' : 'danh sách xem sau';
+    const label = type === 'liked' ? 'phim yêu thích' : 'phim xem sau';
     showToast(added ? `Đã thêm vào ${label}` : `Đã bỏ khỏi ${label}`);
   });
 }

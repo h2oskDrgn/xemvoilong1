@@ -81,12 +81,12 @@ const API = {
   set currentServer(id) {
     if (this.servers[id]) {
       this._current = id;
-      localStorage.setItem('xvl_server', id);
+      localStorage.setItem('dragonfilm_server', id);
     }
   },
 
   init() {
-    const saved = localStorage.getItem('xvl_server');
+    const saved = localStorage.getItem('dragonfilm_server');
     if (saved && this.servers[saved]) this._current = saved;
   },
 

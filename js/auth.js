@@ -15,9 +15,9 @@ function showToast(msg, type = 'success') {
 
 // ---- Auth helpers ----
 const Auth = {
-  getUser() { try { return JSON.parse(localStorage.getItem('xvl_user')); } catch { return null; } },
-  saveUser(u) { localStorage.setItem('xvl_user', JSON.stringify(u)); },
-  logout() { localStorage.removeItem('xvl_user'); window.location.reload(); },
+  getUser() { try { return JSON.parse(localStorage.getItem('dragonfilm_user')); } catch { return null; } },
+  saveUser(u) { localStorage.setItem('dragonfilm_user', JSON.stringify(u)); },
+  logout() { localStorage.removeItem('dragonfilm_user'); window.location.reload(); },
   register(username, password) {
     if (!username || !password) return { ok: false, msg: 'Vui lòng điền đầy đủ thông tin.' };
     if (username.length < 3) return { ok: false, msg: 'Tên tài khoản ít nhất 3 ký tự.' };
@@ -25,7 +25,7 @@ const Auth = {
     const users = Auth._getUsers();
     if (users[username]) return { ok: false, msg: 'Tên tài khoản đã tồn tại.' };
     users[username] = { username, password };
-    localStorage.setItem('xvl_users', JSON.stringify(users));
+    localStorage.setItem('dragonfilm_users', JSON.stringify(users));
     Auth.saveUser({ username });
     return { ok: true };
   },
@@ -37,12 +37,12 @@ const Auth = {
     Auth.saveUser({ username });
     return { ok: true };
   },
-  _getUsers() { try { return JSON.parse(localStorage.getItem('xvl_users')) || {}; } catch { return {}; } }
+  _getUsers() { try { return JSON.parse(localStorage.getItem('dragonfilm_users')) || {}; } catch { return {}; } }
 };
 
 // ---- History helpers ----
 const History = {
-  _key: 'xvl_history',
+  _key: 'dragonfilm_history',
   get() { try { return JSON.parse(localStorage.getItem(this._key)) || []; } catch { return []; } },
   save(list) { localStorage.setItem(this._key, JSON.stringify(list)); },
   add(movie) {
@@ -65,12 +65,12 @@ const History = {
 // ---- Personal movie lists ----
 const MovieLibrary = {
   keys: {
-    watchLater: 'xvl_watch_later',
-    liked: 'xvl_liked_movies',
+    watchLater: 'dragonfilm_watch_later',
+    liked: 'dragonfilm_liked_movies',
   },
   labels: {
-    watchLater: 'Xem sau',
-    liked: 'Yêu thích',
+    watchLater: 'Phim xem sau',
+    liked: 'Phim yêu thích',
   },
   get(type) {
     try {
@@ -157,15 +157,15 @@ const MovieLibrary = {
 
 // ---- Resume time ----
 const ResumeTime = {
-  key(slug) { return `xvl_time_${slug}`; },
+  key(slug) { return `dragonfilm_time_${slug}`; },
   get(slug) { return parseFloat(localStorage.getItem(this.key(slug))) || 0; },
   set(slug, time) { if (time > 5) localStorage.setItem(this.key(slug), time); }
 };
 
 // ---- Import/export all DragonFilm data ----
 const DragonFilmData = {
-  prefixes: ['xvl_', 'dragonfilm_'],
-  managedKeys: new Set(['xvl_history', 'xvl_watch_later', 'xvl_liked_movies']),
+  prefixes: ['dragonfilm_'],
+  managedKeys: new Set(['dragonfilm_history', 'dragonfilm_watch_later', 'dragonfilm_liked_movies']),
 
   exportAll() {
     const payload = {
@@ -259,7 +259,7 @@ const DragonFilmData = {
   },
 
   isManagedStorageKey(key) {
-    return this.managedKeys.has(key) || String(key || '').startsWith('xvl_time_');
+    return this.managedKeys.has(key) || String(key || '').startsWith('dragonfilm_time_');
   },
 
   restoreStorage(storage) {
@@ -277,7 +277,7 @@ const DragonFilmData = {
   getImportedHistory(payload, storage) {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.history)) return payload.history;
-    const storedHistory = this.parseStoredJson(storage?.xvl_history);
+    const storedHistory = this.parseStoredJson(storage?.dragonfilm_history);
     return Array.isArray(storedHistory) ? storedHistory : null;
   },
 
@@ -287,8 +287,8 @@ const DragonFilmData = {
       Object.assign(times, payload.resumeTimes);
     }
     Object.entries(storage || {}).forEach(([key, value]) => {
-      if (String(key).startsWith('xvl_time_')) {
-        times[key.replace('xvl_time_', '')] = parseFloat(value) || 0;
+      if (String(key).startsWith('dragonfilm_time_')) {
+        times[key.replace('dragonfilm_time_', '')] = parseFloat(value) || 0;
       }
     });
     return times;
@@ -301,10 +301,10 @@ const DragonFilmData = {
       : {};
     const watchLater = Array.isArray(directLibrary.watchLater)
       ? directLibrary.watchLater
-      : this.parseStoredJson(storage?.xvl_watch_later);
+      : this.parseStoredJson(storage?.dragonfilm_watch_later);
     const liked = Array.isArray(directLibrary.liked)
       ? directLibrary.liked
-      : this.parseStoredJson(storage?.xvl_liked_movies);
+      : this.parseStoredJson(storage?.dragonfilm_liked_movies);
 
     if (Array.isArray(watchLater)) library.watchLater = watchLater;
     if (Array.isArray(liked)) library.liked = liked;
@@ -323,9 +323,9 @@ const DragonFilmData = {
   getResumeTimes() {
     const times = {};
     Object.keys(localStorage)
-      .filter(key => key.startsWith('xvl_time_'))
+      .filter(key => key.startsWith('dragonfilm_time_'))
       .forEach(key => {
-        times[key.replace('xvl_time_', '')] = parseFloat(localStorage.getItem(key)) || 0;
+        times[key.replace('dragonfilm_time_', '')] = parseFloat(localStorage.getItem(key)) || 0;
       });
     return times;
   },
