@@ -57,11 +57,11 @@ const TYPES = [
 const RANKING_LIMIT = 20;
 const RANKING_COLLAPSED = 5;
 const rankingState = {
-  tmdbWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-weekly-rank' },
-  tmdbKoreaWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-korea-weekly-rank' },
-  tmdbChinaWeekly: { items: [], type: 'tmdb', expanded: false, wrapId: 'tmdb-china-weekly-rank' },
-  animeWeekly: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-weekly-rank' },
-  animeSeason: { items: [], type: 'anime', expanded: false, wrapId: 'anilist-season-rank' },
+  tmdbWeekly: { items: [], type: 'tmdb', wrapId: 'tmdb-weekly-rank' },
+  tmdbKoreaWeekly: { items: [], type: 'tmdb', wrapId: 'tmdb-korea-weekly-rank' },
+  tmdbChinaWeekly: { items: [], type: 'tmdb', wrapId: 'tmdb-china-weekly-rank' },
+  animeWeekly: { items: [], type: 'anime', wrapId: 'anilist-weekly-rank' },
+  animeSeason: { items: [], type: 'anime', wrapId: 'anilist-season-rank' },
 };
 
 // ---- Card renderer ----
@@ -309,12 +309,95 @@ function renderRankingPanel(key) {
   const wrap = document.getElementById(panel?.wrapId);
   const btn = document.querySelector(`.weekly-rank-more[data-rank-key="${key}"]`);
   if (!panel || !wrap) return;
-  wrap.innerHTML = renderRankingRows(panel.items, panel.type, panel.expanded);
+  wrap.innerHTML = renderRankingRows(panel.items, panel.type, false);
   if (btn) {
     const canExpand = panel.items.length > RANKING_COLLAPSED;
     btn.hidden = !canExpand;
-    btn.textContent = panel.expanded ? 'Thu gọn' : `Xem thêm ${panel.items.length}`;
+    btn.textContent = `Xem thêm ${panel.items.length}`;
   }
+}
+
+function ensureRankingModal() {
+  let modal = document.getElementById('ranking-modal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.className = 'ranking-modal-overlay';
+  modal.id = 'ranking-modal';
+  modal.hidden = true;
+  modal.innerHTML = `
+    <div class="ranking-modal" role="dialog" aria-modal="true" aria-labelledby="ranking-modal-title">
+      <div class="ranking-modal-head">
+        <div class="ranking-modal-title-wrap">
+          <div class="ranking-modal-source" id="ranking-modal-source"></div>
+          <div>
+            <h2 id="ranking-modal-title">Bảng xếp hạng</h2>
+            <p id="ranking-modal-subtitle"></p>
+          </div>
+        </div>
+        <button class="ranking-modal-close" type="button" aria-label="Đóng">×</button>
+      </div>
+      <div class="ranking-modal-list" id="ranking-modal-list"></div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal || event.target.closest('.ranking-modal-close')) {
+      closeRankingModal();
+      return;
+    }
+    const row = event.target.closest('.weekly-rank-row');
+    if (row) openRankingMovie(row);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !modal.hidden) closeRankingModal();
+  });
+
+  return modal;
+}
+
+function rankingPanelMeta(key) {
+  const btn = document.querySelector(`.weekly-rank-more[data-rank-key="${key}"]`);
+  const panelEl = btn?.closest('.weekly-rank-panel');
+  const sourceEl = panelEl?.querySelector('.weekly-rank-source');
+  return {
+    title: panelEl?.querySelector('.weekly-rank-head h2')?.textContent?.trim() || 'Bảng xếp hạng',
+    subtitle: panelEl?.querySelector('.weekly-rank-head p')?.textContent?.trim() || `${rankingState[key]?.items?.length || 0} phim`,
+    sourceHtml: sourceEl ? sourceEl.outerHTML : '',
+  };
+}
+
+function openRankingModal(key) {
+  const panel = rankingState[key];
+  if (!panel?.items?.length) return;
+
+  const modal = ensureRankingModal();
+  const meta = rankingPanelMeta(key);
+  const source = modal.querySelector('#ranking-modal-source');
+  const title = modal.querySelector('#ranking-modal-title');
+  const subtitle = modal.querySelector('#ranking-modal-subtitle');
+  const list = modal.querySelector('#ranking-modal-list');
+
+  if (source) source.innerHTML = meta.sourceHtml;
+  if (title) title.textContent = meta.title;
+  if (subtitle) subtitle.textContent = `${meta.subtitle} · ${panel.items.length} phim`;
+  if (list) list.innerHTML = renderRankingRows(panel.items, panel.type, true);
+
+  modal.hidden = false;
+  requestAnimationFrame(() => modal.classList.add('open'));
+  document.body.classList.add('modal-open');
+  modal.querySelector('.ranking-modal-close')?.focus();
+}
+
+function closeRankingModal() {
+  const modal = document.getElementById('ranking-modal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  document.body.classList.remove('modal-open');
+  setTimeout(() => {
+    modal.hidden = true;
+  }, 180);
 }
 
 async function loadWeeklyRankings() {
@@ -419,10 +502,7 @@ function initRankingInteractions() {
     const moreBtn = e.target.closest('.weekly-rank-more');
     if (moreBtn) {
       const key = moreBtn.dataset.rankKey;
-      if (rankingState[key]) {
-        rankingState[key].expanded = !rankingState[key].expanded;
-        renderRankingPanel(key);
-      }
+      openRankingModal(key);
       return;
     }
 
