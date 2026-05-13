@@ -328,7 +328,7 @@ function renderMovieLibraryActions(movie = PlayerState.movie) {
   }
   if (likeBtn) {
     likeBtn.classList.toggle('active', likeActive);
-    likeBtn.textContent = likeActive ? '♥ Đã thích' : '♡ Thích phim';
+    likeBtn.textContent = likeActive ? '♥ Đã yêu thích' : '♡ Yêu thích';
   }
 }
 
@@ -346,7 +346,7 @@ function initMovieLibraryActions() {
     if (!movie.slug) return showToast('Phim chưa tải xong, thử lại sau.', 'error');
     const added = MovieLibrary.toggle('liked', movie);
     renderMovieLibraryActions();
-    showToast(added ? 'Đã thêm vào phim yêu thích' : 'Đã bỏ khỏi phim yêu thích');
+    showToast(added ? 'Đã thêm vào yêu thích' : 'Đã bỏ khỏi yêu thích');
   });
 }
 

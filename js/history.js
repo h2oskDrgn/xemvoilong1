@@ -1,9 +1,21 @@
+const HISTORY_TAB_TYPES = ['history', 'watchLater', 'liked'];
 let activeHistoryTab = 'history';
+const DRAGONFILM_DATA_PREFIXES = ['xvl_', 'dragonfilm_'];
+const DRAGONFILM_MANAGED_STORAGE_KEYS = new Set(['xvl_history', 'xvl_watch_later', 'xvl_liked_movies']);
 
 document.addEventListener('DOMContentLoaded', () => {
+  activeHistoryTab = getHistoryTabFromHash();
   bindHistoryTabs();
+  syncHistoryTabButtons();
   renderActiveHistoryTab();
   bindHistoryImportExport();
+  window.addEventListener('hashchange', () => {
+    const tab = getHistoryTabFromHash();
+    if (tab === activeHistoryTab) return;
+    activeHistoryTab = tab;
+    syncHistoryTabButtons();
+    renderActiveHistoryTab();
+  });
   document.getElementById('history-list')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.history-remove-btn');
     if (!btn) return;
@@ -31,10 +43,27 @@ function bindHistoryTabs() {
   document.querySelectorAll('.history-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       activeHistoryTab = tab.dataset.historyTab || 'history';
-      document.querySelectorAll('.history-tab').forEach(btn => btn.classList.toggle('active', btn === tab));
+      syncHistoryTabButtons();
+      updateHistoryHash(activeHistoryTab);
       renderActiveHistoryTab();
     });
   });
+}
+
+function getHistoryTabFromHash() {
+  const hashTab = decodeURIComponent(location.hash.replace('#', ''));
+  return HISTORY_TAB_TYPES.includes(hashTab) ? hashTab : 'history';
+}
+
+function syncHistoryTabButtons() {
+  document.querySelectorAll('.history-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.historyTab === activeHistoryTab);
+  });
+}
+
+function updateHistoryHash(tab) {
+  const nextUrl = `${location.pathname}${location.search}${tab === 'history' ? '' : `#${tab}`}`;
+  window.history.replaceState({}, '', nextUrl);
 }
 
 function renderActiveHistoryTab() {
@@ -52,9 +81,11 @@ function bindHistoryImportExport() {
 
 function exportHistory() {
   const payload = {
-    app: 'xem-voi-long',
-    version: 1,
+    app: 'dragonfilm',
+    type: 'all-data',
+    version: 2,
     exportedAt: new Date().toISOString(),
+    localStorage: getDragonFilmStorage(),
     history: History.get(),
     resumeTimes: getResumeTimes(),
     movieLibrary: MovieLibrary.exportData(),
@@ -64,12 +95,12 @@ function exportHistory() {
   const a = document.createElement('a');
   const date = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `xem-voi-long-data-${date}.json`;
+  a.download = `dragonfilm-data-${date}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast('Đã xuất dữ liệu cá nhân');
+  showToast('Đã xuất mọi dữ liệu DragonFilm');
 }
 
 function importHistoryFile(event) {
@@ -81,19 +112,110 @@ function importHistoryFile(event) {
   reader.onload = () => {
     try {
       const payload = JSON.parse(reader.result);
-      const importedHistory = Array.isArray(payload) ? payload : payload.history;
-      if (!Array.isArray(importedHistory)) throw new Error('invalid history');
+      const importStorage = getImportStorage(payload);
+      const importedHistory = getImportedHistory(payload, importStorage);
+      const importedResumeTimes = getImportedResumeTimes(payload, importStorage);
+      const importedMovieLibrary = getImportedMovieLibrary(payload, importStorage);
+      const hasStorageData = importStorage && Object.keys(importStorage).some(isDragonFilmStorageKey);
+      const hasImportableData = Array.isArray(importedHistory)
+        || Object.keys(importedResumeTimes).length > 0
+        || Object.keys(importedMovieLibrary).length > 0
+        || hasStorageData;
 
-      mergeHistory(importedHistory);
-      restoreResumeTimes(payload.resumeTimes || {});
-      if (payload.movieLibrary) MovieLibrary.importData(payload.movieLibrary);
+      if (!hasImportableData) throw new Error('invalid data');
+
+      if (hasStorageData) restoreDragonFilmStorage(importStorage);
+      if (Array.isArray(importedHistory)) mergeHistory(importedHistory);
+      restoreResumeTimes(importedResumeTimes);
+      MovieLibrary.importData(importedMovieLibrary);
       renderActiveHistoryTab();
-      showToast('Đã nhập dữ liệu cá nhân');
+      showToast('Đã nhập mọi dữ liệu DragonFilm');
     } catch (error) {
-      showToast('File lịch sử không hợp lệ', 'error');
+      showToast('File dữ liệu không hợp lệ', 'error');
     }
   };
   reader.readAsText(file);
+}
+
+function getDragonFilmStorage() {
+  return Object.keys(localStorage)
+    .filter(isDragonFilmStorageKey)
+    .sort()
+    .reduce((data, key) => {
+      data[key] = localStorage.getItem(key);
+      return data;
+    }, {});
+}
+
+function getImportStorage(payload) {
+  const storage = payload?.localStorage || payload?.storage;
+  return storage && typeof storage === 'object' && !Array.isArray(storage) ? storage : null;
+}
+
+function isDragonFilmStorageKey(key) {
+  return DRAGONFILM_DATA_PREFIXES.some(prefix => String(key || '').startsWith(prefix));
+}
+
+function isManagedDragonFilmStorageKey(key) {
+  return DRAGONFILM_MANAGED_STORAGE_KEYS.has(key) || String(key || '').startsWith('xvl_time_');
+}
+
+function restoreDragonFilmStorage(storage) {
+  Object.entries(storage || {}).forEach(([key, value]) => {
+    if (!isDragonFilmStorageKey(key) || isManagedDragonFilmStorageKey(key)) return;
+    try {
+      if (value === null || value === undefined) localStorage.removeItem(key);
+      else localStorage.setItem(key, String(value));
+    } catch {
+      // Ignore quota/private mode limits and continue with the rest of the import.
+    }
+  });
+}
+
+function getImportedHistory(payload, storage) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.history)) return payload.history;
+  const storedHistory = parseStoredJson(storage?.xvl_history);
+  return Array.isArray(storedHistory) ? storedHistory : null;
+}
+
+function getImportedResumeTimes(payload, storage) {
+  const times = {};
+  if (payload?.resumeTimes && typeof payload.resumeTimes === 'object' && !Array.isArray(payload.resumeTimes)) {
+    Object.assign(times, payload.resumeTimes);
+  }
+  Object.entries(storage || {}).forEach(([key, value]) => {
+    if (String(key).startsWith('xvl_time_')) {
+      times[key.replace('xvl_time_', '')] = parseFloat(value) || 0;
+    }
+  });
+  return times;
+}
+
+function getImportedMovieLibrary(payload, storage) {
+  const library = {};
+  const directLibrary = payload?.movieLibrary && typeof payload.movieLibrary === 'object' && !Array.isArray(payload.movieLibrary)
+    ? payload.movieLibrary
+    : {};
+  const watchLater = Array.isArray(directLibrary.watchLater)
+    ? directLibrary.watchLater
+    : parseStoredJson(storage?.xvl_watch_later);
+  const liked = Array.isArray(directLibrary.liked)
+    ? directLibrary.liked
+    : parseStoredJson(storage?.xvl_liked_movies);
+
+  if (Array.isArray(watchLater)) library.watchLater = watchLater;
+  if (Array.isArray(liked)) library.liked = liked;
+  return library;
+}
+
+function parseStoredJson(value) {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function getResumeTimes() {
@@ -162,12 +284,12 @@ function renderMovieList(type) {
   const list = MovieLibrary.get(type);
   const el = document.getElementById('history-list');
   const countEl = document.getElementById('history-count');
-  const title = type === 'watchLater' ? 'Xem Sau' : 'Phim Đã Thích';
+  const title = type === 'watchLater' ? 'Xem Sau' : 'Phim Yêu Thích';
   const emptyText = type === 'watchLater' ? 'Chưa có phim xem sau' : 'Chưa có phim yêu thích';
   document.querySelector('.page-header-title').textContent = title;
   document.querySelector('.history-note').textContent = type === 'watchLater'
-    ? 'Danh sách xem sau được lưu trên thiết bị này. Bạn có thể xuất file để chuyển sang thiết bị khác.'
-    : 'Danh sách phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất file để sao lưu hoặc chuyển thiết bị.';
+    ? 'Danh sách xem sau được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để chuyển sang thiết bị khác.'
+    : 'Danh sách phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để sao lưu hoặc chuyển thiết bị.';
   if (countEl) countEl.textContent = list.length ? `${list.length} phim` : 'Chưa có phim nào';
   if (!el) return;
 
@@ -203,7 +325,7 @@ function renderHistory() {
   const el      = document.getElementById('history-list');
   const countEl = document.getElementById('history-count');
   document.querySelector('.page-header-title').textContent = 'Lịch Sử Xem';
-  document.querySelector('.history-note').textContent = 'Lịch sử xem và thời gian xem dở được lưu tự động trên thiết bị này. Khi đổi thiết bị, hãy xuất file dữ liệu ra rồi nhập lại trên thiết bị mới.';
+  document.querySelector('.history-note').textContent = 'Lịch sử xem, thời gian xem dở, xem sau, yêu thích, tài khoản và cài đặt được lưu trên thiết bị này. Khi đổi thiết bị, hãy xuất mọi dữ liệu ra rồi nhập lại trên thiết bị mới.';
   if (!el) return;
 
   if (countEl) countEl.textContent = list.length ? `${list.length} phim đã xem` : 'Chưa có phim nào';

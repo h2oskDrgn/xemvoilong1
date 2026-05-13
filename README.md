@@ -9,7 +9,7 @@
 - Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
 - Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
 - Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
-- Hỗ trợ danh sách **Xem sau** và **Đã thích**, lưu bằng `localStorage` và xuất/nhập cùng dữ liệu lịch sử.
+- Hỗ trợ danh sách **Xem sau** và **Yêu thích**, lưu bằng `localStorage` và xuất/nhập cùng mọi dữ liệu DragonFilm.
 - Hiển thị thông tin bổ sung từ TMDB, OMDb và AniList: điểm TMDB, điểm IMDb, điểm AniList, mô tả, thể loại, poster/backdrop, diễn viên và nhân vật/lồng tiếng anime.
 - Lịch sử xem lưu trên thiết bị bằng `localStorage`, có xuất/nhập file JSON.
 - Đăng nhập/đăng ký cục bộ bằng `localStorage`.
@@ -32,7 +32,7 @@
 DragonFilm/
 ├── index.html          # Trang chủ, lọc phim, tìm kiếm, danh sách phim
 ├── movie.html          # Trang xem phim, player, chọn server/tập
-├── history.html        # Lịch sử xem, xuất/nhập lịch sử
+├── history.html        # Lịch sử xem, xem sau, yêu thích, xuất/nhập mọi dữ liệu
 ├── assets/
 │   └── logo.png        # Logo
 ├── css/
@@ -43,7 +43,7 @@ DragonFilm/
     ├── auth.js         # Auth localStorage, history, toast, menu
     ├── main.js         # Logic trang chủ, lọc, tìm kiếm, render card/hero
     ├── player.js       # Logic player, server/tập, lịch sử xem, next tập
-    ├── history.js      # Logic lịch sử, xem sau, đã thích, xuất/nhập dữ liệu
+    ├── history.js      # Logic lịch sử, xem sau, yêu thích, xuất/nhập mọi dữ liệu
     └── annouce.js      # Helper thông báo phụ, giữ tên cũ để tương thích
 ```
 

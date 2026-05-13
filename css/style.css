@@ -1081,7 +1081,7 @@ main { padding-top: var(--header-h); min-height: 100vh; }
 .user-dropdown {
   display: none; position: absolute; top: calc(100% + 8px); right: 0;
   background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--radius); min-width: 200px;
+  border-radius: var(--radius); min-width: 230px;
   box-shadow: 0 16px 40px rgba(0,0,0,0.6);
   overflow: hidden; z-index: 100;
 }
@@ -1095,6 +1095,7 @@ main { padding-top: var(--header-h); min-height: 100vh; }
 
 .dropdown-item {
   display: flex; align-items: center; gap: 10px;
+  width: 100%; border: 0; background: transparent; text-align: left;
   padding: 11px 16px; color: var(--text-dim);
   font-family: var(--font-title); font-size: 14px; font-weight: 600;
   cursor: pointer; text-decoration: none;
@@ -1102,6 +1103,7 @@ main { padding-top: var(--header-h); min-height: 100vh; }
 }
 .dropdown-item:hover { background: var(--green-glow-sm); color: var(--green); }
 .dropdown-item.danger:hover { background: rgba(255,68,68,0.1); color: #ff4444; }
+.dropdown-separator { height: 1px; background: var(--border); margin: 4px 0; }
 
 /* ============================================================
    TOAST NOTIFICATIONS

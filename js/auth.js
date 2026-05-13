@@ -70,7 +70,7 @@ const MovieLibrary = {
   },
   labels: {
     watchLater: 'Xem sau',
-    liked: 'Đã thích',
+    liked: 'Yêu thích',
   },
   get(type) {
     try {
@@ -162,6 +162,232 @@ const ResumeTime = {
   set(slug, time) { if (time > 5) localStorage.setItem(this.key(slug), time); }
 };
 
+// ---- Import/export all DragonFilm data ----
+const DragonFilmData = {
+  prefixes: ['xvl_', 'dragonfilm_'],
+  managedKeys: new Set(['xvl_history', 'xvl_watch_later', 'xvl_liked_movies']),
+
+  exportAll() {
+    const payload = {
+      app: 'dragonfilm',
+      type: 'all-data',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      localStorage: this.getStorage(),
+      history: History.get(),
+      resumeTimes: this.getResumeTimes(),
+      movieLibrary: MovieLibrary.exportData(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `dragonfilm-data-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Đã xuất mọi dữ liệu DragonFilm');
+  },
+
+  chooseImportFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.hidden = true;
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (file) this.importFile(file);
+    });
+    document.body.appendChild(input);
+    input.click();
+  },
+
+  importFile(file, onSuccess) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        this.importPayload(JSON.parse(reader.result));
+        this.refreshAfterImport();
+        if (typeof onSuccess === 'function') onSuccess();
+        showToast('Đã nhập mọi dữ liệu DragonFilm');
+      } catch {
+        showToast('File dữ liệu không hợp lệ', 'error');
+      }
+    };
+    reader.readAsText(file);
+  },
+
+  importPayload(payload) {
+    const importStorage = this.getImportStorage(payload);
+    const importedHistory = this.getImportedHistory(payload, importStorage);
+    const importedResumeTimes = this.getImportedResumeTimes(payload, importStorage);
+    const importedMovieLibrary = this.getImportedMovieLibrary(payload, importStorage);
+    const hasStorageData = importStorage && Object.keys(importStorage).some(key => this.isStorageKey(key));
+    const hasImportableData = Array.isArray(importedHistory)
+      || Object.keys(importedResumeTimes).length > 0
+      || Object.keys(importedMovieLibrary).length > 0
+      || hasStorageData;
+
+    if (!hasImportableData) throw new Error('invalid data');
+
+    if (hasStorageData) this.restoreStorage(importStorage);
+    if (Array.isArray(importedHistory)) this.mergeHistory(importedHistory);
+    this.restoreResumeTimes(importedResumeTimes);
+    MovieLibrary.importData(importedMovieLibrary);
+  },
+
+  getStorage() {
+    return Object.keys(localStorage)
+      .filter(key => this.isStorageKey(key))
+      .sort()
+      .reduce((data, key) => {
+        data[key] = localStorage.getItem(key);
+        return data;
+      }, {});
+  },
+
+  getImportStorage(payload) {
+    const storage = payload?.localStorage || payload?.storage;
+    return storage && typeof storage === 'object' && !Array.isArray(storage) ? storage : null;
+  },
+
+  isStorageKey(key) {
+    return this.prefixes.some(prefix => String(key || '').startsWith(prefix));
+  },
+
+  isManagedStorageKey(key) {
+    return this.managedKeys.has(key) || String(key || '').startsWith('xvl_time_');
+  },
+
+  restoreStorage(storage) {
+    Object.entries(storage || {}).forEach(([key, value]) => {
+      if (!this.isStorageKey(key) || this.isManagedStorageKey(key)) return;
+      try {
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, String(value));
+      } catch {
+        // Ignore storage quota/private mode limits and continue importing.
+      }
+    });
+  },
+
+  getImportedHistory(payload, storage) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.history)) return payload.history;
+    const storedHistory = this.parseStoredJson(storage?.xvl_history);
+    return Array.isArray(storedHistory) ? storedHistory : null;
+  },
+
+  getImportedResumeTimes(payload, storage) {
+    const times = {};
+    if (payload?.resumeTimes && typeof payload.resumeTimes === 'object' && !Array.isArray(payload.resumeTimes)) {
+      Object.assign(times, payload.resumeTimes);
+    }
+    Object.entries(storage || {}).forEach(([key, value]) => {
+      if (String(key).startsWith('xvl_time_')) {
+        times[key.replace('xvl_time_', '')] = parseFloat(value) || 0;
+      }
+    });
+    return times;
+  },
+
+  getImportedMovieLibrary(payload, storage) {
+    const library = {};
+    const directLibrary = payload?.movieLibrary && typeof payload.movieLibrary === 'object' && !Array.isArray(payload.movieLibrary)
+      ? payload.movieLibrary
+      : {};
+    const watchLater = Array.isArray(directLibrary.watchLater)
+      ? directLibrary.watchLater
+      : this.parseStoredJson(storage?.xvl_watch_later);
+    const liked = Array.isArray(directLibrary.liked)
+      ? directLibrary.liked
+      : this.parseStoredJson(storage?.xvl_liked_movies);
+
+    if (Array.isArray(watchLater)) library.watchLater = watchLater;
+    if (Array.isArray(liked)) library.liked = liked;
+    return library;
+  },
+
+  parseStoredJson(value) {
+    if (typeof value !== 'string') return undefined;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  },
+
+  getResumeTimes() {
+    const times = {};
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('xvl_time_'))
+      .forEach(key => {
+        times[key.replace('xvl_time_', '')] = parseFloat(localStorage.getItem(key)) || 0;
+      });
+    return times;
+  },
+
+  restoreResumeTimes(times) {
+    Object.entries(times || {}).forEach(([slug, time]) => {
+      const value = parseFloat(time);
+      if (slug && value > 5) ResumeTime.set(slug, value);
+    });
+  },
+
+  mergeHistory(importedHistory) {
+    const byKey = new Map();
+    [...History.get(), ...importedHistory].forEach(item => {
+      if (!item || !item.slug) return;
+      const key = this.historyItemKey(item);
+      const existing = byKey.get(key);
+      if (!existing || Number(item.watchedAt || 0) > Number(existing.watchedAt || 0)) {
+        byKey.set(key, {
+          slug: item.slug,
+          name: item.name || item.slug,
+          poster_url: item.poster_url || '',
+          year: item.year || '',
+          _server: item._server || 'kkphim',
+          source_name: item.source_name || '',
+          episode_name: item.episode_name || '',
+          episode_slug: item.episode_slug || '',
+          episode_server_name: item.episode_server_name || '',
+          episode_server_idx: Number(item.episode_server_idx || 0),
+          episode_index0: Number(item.episode_index0 || 0),
+          episode_number: Number(item.episode_number || 0),
+          watched_seconds: Number(item.watched_seconds || 0),
+          resume_key: item.resume_key || '',
+          watchedAt: Number(item.watchedAt || Date.now()),
+        });
+      }
+    });
+    History.save([...byKey.values()]
+      .sort((a, b) => Number(b.watchedAt || 0) - Number(a.watchedAt || 0))
+      .slice(0, 50));
+  },
+
+  historyItemKey(item) {
+    const server = item._server || 'kkphim';
+    const episode = item.episode_slug || item.episode_index0 || 0;
+    return `${server}:${item.slug}:${episode}`;
+  },
+
+  refreshAfterImport() {
+    if (typeof renderActiveHistoryTab === 'function') renderActiveHistoryTab();
+    if (typeof renderMovieLibraryActions === 'function') renderMovieLibraryActions();
+    if (typeof libraryMovieFromElement === 'function') {
+      document.querySelectorAll('.movie-action-btn[data-library-action]').forEach(btn => {
+        btn.classList.toggle('active', MovieLibrary.has(btn.dataset.libraryAction, libraryMovieFromElement(btn)));
+      });
+    }
+    document.dispatchEvent(new CustomEvent('dragonfilm:data-imported'));
+  },
+};
+
+if (typeof window !== 'undefined') window.DragonFilmData = DragonFilmData;
+
 // ---- DOM helpers ----
 function $(sel, ctx = document) { return ctx.querySelector(sel); }
 function $$(sel, ctx = document) { return [...ctx.querySelectorAll(sel)]; }
@@ -236,6 +462,16 @@ function initHeaderAuth() {
 
   document.addEventListener('click', () => {
     document.getElementById('user-menu')?.classList.remove('open');
+  });
+
+  document.querySelectorAll('[data-data-action]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('user-menu')?.classList.remove('open');
+      if (btn.dataset.dataAction === 'export') DragonFilmData.exportAll();
+      if (btn.dataset.dataAction === 'import') DragonFilmData.chooseImportFile();
+    });
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', () => {
