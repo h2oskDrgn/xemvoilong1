@@ -9,10 +9,10 @@
 - Hỗ trợ 3 nguồn phim: KKPhim, OPhim và NguonC.
 - Tự động gộp phim trùng giữa nhiều server và lưu slug từng nguồn để chuyển server khi cần.
 - Trang xem phim có player, chọn nguồn, chọn tập và nút chuyển tập tiếp theo.
-- Hỗ trợ danh sách **Phim xem sau** và **Phim yêu thích**, lưu cục bộ và tự đồng bộ Supabase khi người dùng đăng nhập.
+- Hỗ trợ danh sách **Phim xem sau** và **Phim yêu thích**, lưu bằng `localStorage` và xuất/nhập cùng mọi dữ liệu DragonFilm.
 - Hiển thị thông tin bổ sung từ TMDB, OMDb và AniList: điểm TMDB, điểm IMDb, điểm AniList, mô tả, thể loại, poster/backdrop, diễn viên và nhân vật/lồng tiếng anime.
-- Lịch sử xem lưu trên thiết bị bằng `localStorage`, đồng bộ Supabase qua Cloudflare Pages Functions khi đăng nhập, có xuất/nhập file JSON.
-- Đăng nhập/đăng ký qua Cloudflare Pages Functions, mật khẩu được hash trước khi lưu trong Supabase.
+- Lịch sử xem lưu trên thiết bị bằng `localStorage`, có xuất/nhập file JSON.
+- Đăng nhập/đăng ký cục bộ bằng `localStorage`.
 - Giao diện tối, responsive cho desktop và mobile.
 
 ## Nguồn dữ liệu
@@ -30,7 +30,6 @@
 
 ```text
 DragonFilm/
-├── functions/          # Cloudflare Pages Functions cho auth và đồng bộ dữ liệu người dùng
 ├── index.html          # Trang chủ, lọc phim, tìm kiếm, danh sách phim
 ├── movie.html          # Trang xem phim, player, chọn server/tập
 ├── history.html        # Lịch sử xem, xem sau, yêu thích, xuất/nhập mọi dữ liệu
@@ -39,15 +38,9 @@ DragonFilm/
 ├── css/
 │   ├── style.css       # Style chung cho trang chủ, lịch sử, modal, responsive
 │   └── player.css      # Style riêng cho trang xem phim/player
-├── supabase/
-│   └── schema.sql      # Bảng Supabase cho tài khoản và dữ liệu người dùng
-├── .dev.vars.example   # Biến môi trường mẫu khi chạy Cloudflare local
-├── .env.example        # Biến môi trường mẫu
-├── _routes.json        # Chỉ invoke Pages Functions cho /api/*
-├── package.json        # Script chạy Wrangler Pages dev/deploy
 └── js/
     ├── api.js          # Layer gọi API phim, TMDB, OMDb, AniList, normalize dữ liệu
-    ├── auth.js         # Auth, đồng bộ Supabase, history, toast, menu
+    ├── auth.js         # Auth localStorage, history, toast, menu
     ├── main.js         # Logic trang chủ, lọc, tìm kiếm, render card/hero
     ├── player.js       # Logic player, server/tập, lịch sử xem, next tập
     ├── history.js      # Logic lịch sử, xem sau, yêu thích, xuất/nhập mọi dữ liệu
@@ -70,39 +63,6 @@ Sau đó mở:
 ```text
 http://localhost:8000
 ```
-
-Nếu muốn chạy cả Cloudflare Pages Functions ở local, cài Wrangler rồi chạy:
-
-```bash
-cp .dev.vars.example .dev.vars
-npx wrangler pages dev .
-```
-
-## Dùng Cloudflare + Supabase để lưu dữ liệu người dùng
-
-1. Tạo project Supabase.
-2. Mở **SQL Editor** trong Supabase và chạy toàn bộ file [supabase/schema.sql](supabase/schema.sql).
-3. Deploy project lên Cloudflare Pages.
-4. Trong **Cloudflare Workers & Pages -> project -> Settings -> Variables and Secrets**, thêm:
-
-```text
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-DRAGONFILM_JWT_SECRET=mot-chuoi-bi-mat-dai-it-nhat-24-ky-tu
-```
-
-Nên lưu `SUPABASE_SERVICE_ROLE_KEY` và `DRAGONFILM_JWT_SECRET` dạng secret/encrypted. Không đưa các key này vào JavaScript frontend.
-
-Các API serverless đã có sẵn:
-
-| Endpoint | Vai trò |
-| --- | --- |
-| `POST /api/auth/register` | Tạo tài khoản, hash mật khẩu và lưu vào Supabase |
-| `POST /api/auth/login` | Đăng nhập và trả token phiên |
-| `GET /api/user-data` | Lấy lịch sử/xem sau/yêu thích của người dùng |
-| `POST /api/user-data` | Đồng bộ dữ liệu người dùng lên Supabase |
-
-Frontend vẫn giữ `localStorage` làm cache nhanh. Sau khi đăng nhập, dữ liệu cục bộ sẽ được merge với dữ liệu trên Supabase rồi tự đồng bộ lại.
 
 ## Deploy lên GitHub Pages
 
@@ -137,17 +97,17 @@ Vì đây là web tĩnh chạy hoàn toàn ở frontend, các key đặt trong J
 
 ## LocalStorage
 
-Dự án dùng `localStorage` làm cache cục bộ để lưu:
+Dự án dùng `localStorage` để lưu:
 
 - Server đang chọn: `dragonfilm_server`.
-- Phiên đăng nhập hiện tại.
+- Tài khoản local.
 - Lịch sử xem.
 - Thời gian xem dở.
 - Phim xem sau.
 - Phim yêu thích.
 - Cache metadata OMDb/TMDB/AniList.
 
-Khi deploy với Cloudflare + Supabase, lịch sử xem, thời gian xem dở, phim xem sau và phim yêu thích sẽ đồng bộ theo tài khoản. Chức năng **Xuất mọi dữ liệu** và **Nhập mọi dữ liệu** vẫn giữ lại để sao lưu hoặc nhập dữ liệu cũ.
+Dữ liệu này chỉ nằm trên trình duyệt/thiết bị hiện tại. Khi đổi thiết bị, dùng chức năng **Xuất mọi dữ liệu** và **Nhập mọi dữ liệu** trong `history.html`.
 
 ## Troubleshooting
 
@@ -171,6 +131,6 @@ Khi deploy với Cloudflare + Supabase, lịch sử xem, thời gian xem dở, p
 
 ## Ghi chú phát triển
 
-- Phần frontend vẫn là static web app; backend nhẹ nằm trong thư mục `functions/` và chạy bằng Cloudflare Pages Functions.
+- Đây là dự án frontend tĩnh, không có backend và không có bước build.
 - Khi sửa CSS/JS, tăng query version trong HTML như `style.css?v=...` hoặc `main.js?v=...` để tránh cache trình duyệt.
 - Khi thêm nguồn phim mới, cập nhật `API.servers` trong `js/api.js` và đảm bảo normalize dữ liệu về cùng format.
