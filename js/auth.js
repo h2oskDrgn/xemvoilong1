@@ -13,29 +13,89 @@ function showToast(msg, type = 'success') {
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; t.style.transition = '.3s'; setTimeout(() => t.remove(), 300); }, 3000);
 }
 
+const DRAGONFILM_PRIVATE_STORAGE_KEYS = new Set([
+  'dragonfilm_auth_token',
+  'dragonfilm_user',
+  'dragonfilm_users',
+]);
+
+function isPrivateDragonFilmStorageKey(key) {
+  return DRAGONFILM_PRIVATE_STORAGE_KEYS.has(String(key || ''));
+}
+
+function scheduleCloudUpload() {
+  if (typeof window !== 'undefined' && window.DragonFilmCloud) {
+    window.DragonFilmCloud.scheduleUpload();
+  }
+}
+
 // ---- Auth helpers ----
 const Auth = {
   getUser() { try { return JSON.parse(localStorage.getItem('dragonfilm_user')); } catch { return null; } },
-  saveUser(u) { localStorage.setItem('dragonfilm_user', JSON.stringify(u)); },
-  logout() { localStorage.removeItem('dragonfilm_user'); window.location.reload(); },
-  register(username, password) {
-    if (!username || !password) return { ok: false, msg: 'Vui lòng điền đầy đủ thông tin.' };
-    if (username.length < 3) return { ok: false, msg: 'Tên tài khoản ít nhất 3 ký tự.' };
-    if (password.length < 4) return { ok: false, msg: 'Mật khẩu ít nhất 4 ký tự.' };
+  getToken() { return localStorage.getItem('dragonfilm_auth_token') || ''; },
+  saveUser(u, token = '') {
+    localStorage.setItem('dragonfilm_user', JSON.stringify(u));
+    if (token) localStorage.setItem('dragonfilm_auth_token', token);
+  },
+  clearSession() {
+    localStorage.removeItem('dragonfilm_user');
+    localStorage.removeItem('dragonfilm_auth_token');
+  },
+  logout() { Auth.clearSession(); window.location.reload(); },
+  async register(username, password) {
+    const validationError = Auth._validate(username, password);
+    if (validationError) return { ok: false, msg: validationError };
+    const cloud = window.DragonFilmCloud;
+    if (!cloud) return Auth._registerLocal(username, password);
+
+    try {
+      const session = await cloud.register(username, password);
+      Auth.saveUser(session.user, session.token);
+      await cloud.afterSignIn();
+      return { ok: true, cloud: true };
+    } catch (error) {
+      if (cloud.canUseLocalFallback(error)) return Auth._registerLocal(username, password);
+      return { ok: false, msg: error.message || 'Không kết nối được server đăng ký.' };
+    }
+  },
+  async login(username, password) {
+    const validationError = Auth._validate(username, password);
+    if (validationError) return { ok: false, msg: validationError };
+    const cloud = window.DragonFilmCloud;
+    if (!cloud) return Auth._loginLocal(username, password);
+
+    try {
+      const session = await cloud.login(username, password);
+      Auth.saveUser(session.user, session.token);
+      await cloud.afterSignIn();
+      return { ok: true, cloud: true };
+    } catch (error) {
+      if (cloud.canUseLocalFallback(error)) return Auth._loginLocal(username, password);
+      return { ok: false, msg: error.message || 'Không kết nối được server đăng nhập.' };
+    }
+  },
+  _validate(username, password) {
+    if (!username || !password) return 'Vui lòng điền đầy đủ thông tin.';
+    if (username.length < 3) return 'Tên tài khoản ít nhất 3 ký tự.';
+    if (username.length > 32) return 'Tên tài khoản tối đa 32 ký tự.';
+    if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return 'Tên tài khoản chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.';
+    if (password.length < 4) return 'Mật khẩu ít nhất 4 ký tự.';
+    return '';
+  },
+  _registerLocal(username, password) {
     const users = Auth._getUsers();
     if (users[username]) return { ok: false, msg: 'Tên tài khoản đã tồn tại.' };
     users[username] = { username, password };
     localStorage.setItem('dragonfilm_users', JSON.stringify(users));
     Auth.saveUser({ username });
-    return { ok: true };
+    return { ok: true, localOnly: true };
   },
-  login(username, password) {
-    if (!username || !password) return { ok: false, msg: 'Vui lòng điền đầy đủ thông tin.' };
+  _loginLocal(username, password) {
     const users = Auth._getUsers();
     const u = users[username];
     if (!u || u.password !== password) return { ok: false, msg: 'Sai tên tài khoản hoặc mật khẩu.' };
     Auth.saveUser({ username });
-    return { ok: true };
+    return { ok: true, localOnly: true };
   },
   _getUsers() { try { return JSON.parse(localStorage.getItem('dragonfilm_users')) || {}; } catch { return {}; } }
 };
@@ -44,7 +104,10 @@ const Auth = {
 const History = {
   _key: 'dragonfilm_history',
   get() { try { return JSON.parse(localStorage.getItem(this._key)) || []; } catch { return []; } },
-  save(list) { localStorage.setItem(this._key, JSON.stringify(list)); },
+  save(list) {
+    localStorage.setItem(this._key, JSON.stringify(list));
+    scheduleCloudUpload();
+  },
   add(movie) {
     if (!movie || !movie.slug) return;
     const server = movie._server || 'kkphim';
@@ -59,7 +122,10 @@ const History = {
   remove(slug) {
     this.save(this.get().filter(m => m.slug !== slug));
   },
-  clear() { localStorage.removeItem(this._key); }
+  clear() {
+    localStorage.removeItem(this._key);
+    scheduleCloudUpload();
+  }
 };
 
 // ---- Personal movie lists ----
@@ -82,6 +148,7 @@ const MovieLibrary = {
   save(type, list) {
     if (!this.keys[type]) return;
     localStorage.setItem(this.keys[type], JSON.stringify(list || []));
+    scheduleCloudUpload();
   },
   keyOf(movie) {
     if (!movie) return '';
@@ -129,7 +196,10 @@ const MovieLibrary = {
     return true;
   },
   clear(type) {
-    if (this.keys[type]) localStorage.removeItem(this.keys[type]);
+    if (this.keys[type]) {
+      localStorage.removeItem(this.keys[type]);
+      scheduleCloudUpload();
+    }
   },
   exportData() {
     return {
@@ -159,7 +229,12 @@ const MovieLibrary = {
 const ResumeTime = {
   key(slug) { return `dragonfilm_time_${slug}`; },
   get(slug) { return parseFloat(localStorage.getItem(this.key(slug))) || 0; },
-  set(slug, time) { if (time > 5) localStorage.setItem(this.key(slug), time); }
+  set(slug, time) {
+    if (time > 5) {
+      localStorage.setItem(this.key(slug), time);
+      scheduleCloudUpload();
+    }
+  }
 };
 
 // ---- Import/export all DragonFilm data ----
@@ -225,7 +300,7 @@ const DragonFilmData = {
     const importedHistory = this.getImportedHistory(payload, importStorage);
     const importedResumeTimes = this.getImportedResumeTimes(payload, importStorage);
     const importedMovieLibrary = this.getImportedMovieLibrary(payload, importStorage);
-    const hasStorageData = importStorage && Object.keys(importStorage).some(key => this.isStorageKey(key));
+    const hasStorageData = importStorage && Object.keys(importStorage).some(key => this.isStorageKey(key) && !isPrivateDragonFilmStorageKey(key));
     const hasImportableData = Array.isArray(importedHistory)
       || Object.keys(importedResumeTimes).length > 0
       || Object.keys(importedMovieLibrary).length > 0
@@ -241,7 +316,7 @@ const DragonFilmData = {
 
   getStorage() {
     return Object.keys(localStorage)
-      .filter(key => this.isStorageKey(key))
+      .filter(key => this.isStorageKey(key) && !isPrivateDragonFilmStorageKey(key))
       .sort()
       .reduce((data, key) => {
         data[key] = localStorage.getItem(key);
@@ -264,7 +339,7 @@ const DragonFilmData = {
 
   restoreStorage(storage) {
     Object.entries(storage || {}).forEach(([key, value]) => {
-      if (!this.isStorageKey(key) || this.isManagedStorageKey(key)) return;
+      if (!this.isStorageKey(key) || this.isManagedStorageKey(key) || isPrivateDragonFilmStorageKey(key)) return;
       try {
         if (value === null || value === undefined) localStorage.removeItem(key);
         else localStorage.setItem(key, String(value));
@@ -388,6 +463,165 @@ const DragonFilmData = {
 
 if (typeof window !== 'undefined') window.DragonFilmData = DragonFilmData;
 
+const DragonFilmCloud = {
+  apiBase: (typeof window !== 'undefined' && window.DRAGONFILM_API_BASE ? window.DRAGONFILM_API_BASE : '').replace(/\/$/, ''),
+  uploadTimer: null,
+  syncing: false,
+
+  hasSession() {
+    return Boolean(Auth.getToken());
+  },
+
+  async register(username, password) {
+    return this.request('/api/auth/register', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ username, password }),
+    });
+  },
+
+  async login(username, password) {
+    return this.request('/api/auth/login', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ username, password }),
+    });
+  },
+
+  async request(path, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    };
+    const token = Auth.getToken();
+    if (options.auth !== false && token) headers.Authorization = `Bearer ${token}`;
+
+    let response;
+    try {
+      response = await fetch(`${this.apiBase}${path}`, {
+        ...options,
+        headers,
+      });
+    } catch {
+      const error = new Error('Không kết nối được server Vercel.');
+      error.status = 0;
+      throw error;
+    }
+
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+
+    if (!response.ok || payload?.ok === false) {
+      const error = new Error(payload?.error || `Server trả về lỗi ${response.status}.`);
+      error.status = response.status;
+      error.code = payload?.code;
+      throw error;
+    }
+
+    return payload || { ok: true };
+  },
+
+  async afterSignIn() {
+    if (!this.hasSession()) return;
+    this.setStatus('Đang đồng bộ Supabase');
+
+    try {
+      const cloudData = await this.download();
+      if (this.isImportable(cloudData)) DragonFilmData.importPayload(cloudData);
+      await this.uploadNow();
+      DragonFilmData.refreshAfterImport();
+      this.setStatus('Đã đồng bộ Supabase');
+    } catch (error) {
+      console.warn(error);
+      this.setStatus('Chưa đồng bộ Supabase', true);
+    }
+  },
+
+  async syncOnLoad() {
+    if (!this.hasSession()) return;
+    this.setStatus('Đang đồng bộ Supabase');
+
+    try {
+      const cloudData = await this.download();
+      if (this.isImportable(cloudData)) DragonFilmData.importPayload(cloudData);
+      await this.uploadNow();
+      DragonFilmData.refreshAfterImport();
+      this.setStatus('Đã đồng bộ Supabase');
+    } catch (error) {
+      console.warn(error);
+      this.setStatus('Chưa đồng bộ Supabase', true);
+    }
+  },
+
+  async download() {
+    const response = await this.request('/api/user-data');
+    return response.data || null;
+  },
+
+  scheduleUpload() {
+    if (!this.hasSession()) return;
+    clearTimeout(this.uploadTimer);
+    this.uploadTimer = setTimeout(() => {
+      this.uploadNow().catch(error => {
+        console.warn(error);
+        this.setStatus('Chưa đồng bộ Supabase', true);
+      });
+    }, 1200);
+  },
+
+  async uploadNow() {
+    if (!this.hasSession() || this.syncing) return;
+    this.syncing = true;
+
+    try {
+      await this.request('/api/user-data', {
+        method: 'POST',
+        body: JSON.stringify({ data: this.buildPayload() }),
+      });
+      this.setStatus('Đã đồng bộ Supabase');
+    } finally {
+      this.syncing = false;
+    }
+  },
+
+  buildPayload() {
+    return {
+      app: 'dragonfilm',
+      type: 'cloud-data',
+      version: 3,
+      savedAt: new Date().toISOString(),
+      localStorage: DragonFilmData.getStorage(),
+      history: History.get(),
+      resumeTimes: DragonFilmData.getResumeTimes(),
+      movieLibrary: MovieLibrary.exportData(),
+    };
+  },
+
+  isImportable(data) {
+    return Boolean(data && (
+      Array.isArray(data.history)
+      || Object.keys(data.resumeTimes || {}).length
+      || Object.keys(data.movieLibrary || {}).length
+      || Object.keys(data.localStorage || data.storage || {}).length
+    ));
+  },
+
+  canUseLocalFallback(error) {
+    const localHost = ['localhost', '127.0.0.1', ''].includes(location.hostname);
+    return location.protocol === 'file:' || (localHost && (!error?.status || error.status === 404));
+  },
+
+  setStatus(text, isError = false) {
+    document.querySelectorAll('[data-cloud-status]').forEach(el => {
+      el.textContent = text;
+      el.classList.toggle('sync-error', Boolean(isError));
+    });
+  },
+};
+
+if (typeof window !== 'undefined') window.DragonFilmCloud = DragonFilmCloud;
+
 // ---- DOM helpers ----
 function $(sel, ctx = document) { return ctx.querySelector(sel); }
 function $$(sel, ctx = document) { return [...ctx.querySelectorAll(sel)]; }
@@ -415,7 +649,7 @@ function initGuestNotice() {
       <button class="guest-notice-close" type="button" aria-label="Đóng thông báo">×</button>
       <div class="guest-notice-kicker">DragonFilm</div>
       <h2 id="guest-notice-title">Xem phim ngay, không cần tài khoản</h2>
-      <p>Bạn có thể chọn phim và xem liền, không cần đăng nhập hay đăng ký. Lịch sử xem cùng thời gian đang xem dở sẽ tự lưu trên thiết bị này để lần sau mở lại tiếp tục.</p>
+      <p>Bạn có thể chọn phim và xem liền. Khi đăng nhập, lịch sử xem, phim xem sau và phim yêu thích sẽ được đồng bộ qua Supabase để dùng trên nhiều thiết bị.</p>
       <button class="guest-notice-action" type="button">Đã hiểu</button>
     </div>`;
 
@@ -441,12 +675,17 @@ function initHeaderAuth() {
   const userMenu = document.getElementById('user-menu');
   const avatarEl = document.getElementById('user-avatar');
   const usernameEl = document.getElementById('user-name');
+  const userSubEl = userMenu?.querySelector('.user-info-sub');
 
   if (user) {
     if (loginBtn) loginBtn.style.display = 'none';
     if (userMenu) userMenu.style.display = 'flex';
     if (avatarEl) avatarEl.textContent = user.username.charAt(0).toUpperCase();
     if (usernameEl) usernameEl.textContent = user.username;
+    if (userSubEl) {
+      userSubEl.setAttribute('data-cloud-status', '');
+      userSubEl.textContent = Auth.getToken() ? 'Đồng bộ Supabase' : 'Lưu cục bộ';
+    }
   } else {
     if (loginBtn) loginBtn.style.display = 'flex';
     if (userMenu) userMenu.style.display = 'none';
@@ -509,28 +748,38 @@ function initModal() {
   setTab('login');
 
   // Login form
-  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    const submitBtn = form.querySelector('[type="submit"]');
     const u = document.getElementById('login-user')?.value.trim();
     const p = document.getElementById('login-pass')?.value;
-    const r = Auth.login(u, p);
     const err = document.getElementById('login-error');
+    if (err) { err.textContent = ''; err.classList.remove('show'); }
+    if (submitBtn) submitBtn.disabled = true;
+    const r = await Auth.login(u, p);
+    if (submitBtn) submitBtn.disabled = false;
     if (!r.ok) { if (err) { err.textContent = r.msg; err.classList.add('show'); } return; }
     overlay.classList.remove('open');
-    showToast(`Chào mừng ${u}! 🎬`);
+    showToast(r.localOnly ? `Chào mừng ${u}! Dữ liệu đang lưu cục bộ.` : `Chào mừng ${u}! Đã bật đồng bộ.`);
     setTimeout(() => location.reload(), 600);
   });
 
   // Register form
-  document.getElementById('reg-form')?.addEventListener('submit', (e) => {
+  document.getElementById('reg-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    const submitBtn = form.querySelector('[type="submit"]');
     const u = document.getElementById('reg-user')?.value.trim();
     const p = document.getElementById('reg-pass')?.value;
-    const r = Auth.register(u, p);
     const err = document.getElementById('reg-error');
+    if (err) { err.textContent = ''; err.classList.remove('show'); }
+    if (submitBtn) submitBtn.disabled = true;
+    const r = await Auth.register(u, p);
+    if (submitBtn) submitBtn.disabled = false;
     if (!r.ok) { if (err) { err.textContent = r.msg; err.classList.add('show'); } return; }
     overlay.classList.remove('open');
-    showToast(`Đăng ký thành công! Chào ${u} 🎉`);
+    showToast(r.localOnly ? `Đăng ký cục bộ thành công, chào ${u}.` : `Đăng ký thành công, chào ${u}. Đã bật đồng bộ.`);
     setTimeout(() => location.reload(), 600);
   });
 }
@@ -575,5 +824,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initGuestNotice();
   initMobileNav();
   initHeaderSearchRedirect();
+  DragonFilmCloud.syncOnLoad();
   document.body.classList.add('page-enter');
 });

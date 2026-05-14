@@ -2,6 +2,7 @@ const HISTORY_TAB_TYPES = ['history', 'watchLater', 'liked'];
 let activeHistoryTab = 'history';
 const DRAGONFILM_DATA_PREFIXES = ['dragonfilm_'];
 const DRAGONFILM_MANAGED_STORAGE_KEYS = new Set(['dragonfilm_history', 'dragonfilm_watch_later', 'dragonfilm_liked_movies']);
+const HISTORY_PRIVATE_STORAGE_KEYS = new Set(['dragonfilm_auth_token', 'dragonfilm_user', 'dragonfilm_users']);
 
 document.addEventListener('DOMContentLoaded', () => {
   activeHistoryTab = getHistoryTabFromHash();
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (activeHistoryTab === 'history') {
         History.clear();
         Object.keys(localStorage).filter(k => k.startsWith('dragonfilm_time_')).forEach(k => localStorage.removeItem(k));
+        if (typeof scheduleCloudUpload === 'function') scheduleCloudUpload();
       } else {
         MovieLibrary.clear(activeHistoryTab);
       }
@@ -80,6 +82,11 @@ function bindHistoryImportExport() {
 }
 
 function exportHistory() {
+  if (window.DragonFilmData) {
+    DragonFilmData.exportAll();
+    return;
+  }
+
   const payload = {
     app: 'dragonfilm',
     type: 'all-data',
@@ -107,6 +114,10 @@ function importHistoryFile(event) {
   const file = event.target.files?.[0];
   event.target.value = '';
   if (!file) return;
+  if (window.DragonFilmData) {
+    DragonFilmData.importFile(file, renderActiveHistoryTab);
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -139,7 +150,7 @@ function importHistoryFile(event) {
 
 function getDragonFilmStorage() {
   return Object.keys(localStorage)
-    .filter(isDragonFilmStorageKey)
+    .filter(key => isDragonFilmStorageKey(key) && !isPrivateHistoryStorageKey(key))
     .sort()
     .reduce((data, key) => {
       data[key] = localStorage.getItem(key);
@@ -156,13 +167,17 @@ function isDragonFilmStorageKey(key) {
   return DRAGONFILM_DATA_PREFIXES.some(prefix => String(key || '').startsWith(prefix));
 }
 
+function isPrivateHistoryStorageKey(key) {
+  return HISTORY_PRIVATE_STORAGE_KEYS.has(String(key || ''));
+}
+
 function isManagedDragonFilmStorageKey(key) {
   return DRAGONFILM_MANAGED_STORAGE_KEYS.has(key) || String(key || '').startsWith('dragonfilm_time_');
 }
 
 function restoreDragonFilmStorage(storage) {
   Object.entries(storage || {}).forEach(([key, value]) => {
-    if (!isDragonFilmStorageKey(key) || isManagedDragonFilmStorageKey(key)) return;
+    if (!isDragonFilmStorageKey(key) || isManagedDragonFilmStorageKey(key) || isPrivateHistoryStorageKey(key)) return;
     try {
       if (value === null || value === undefined) localStorage.removeItem(key);
       else localStorage.setItem(key, String(value));
@@ -288,8 +303,8 @@ function renderMovieList(type) {
   const emptyText = type === 'watchLater' ? 'Chưa có phim xem sau' : 'Chưa có phim yêu thích';
   document.querySelector('.page-header-title').textContent = title;
   document.querySelector('.history-note').textContent = type === 'watchLater'
-    ? 'Phim xem sau được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để chuyển sang thiết bị khác.'
-    : 'Phim yêu thích được lưu trên thiết bị này. Bạn có thể xuất mọi dữ liệu để sao lưu hoặc chuyển thiết bị.';
+    ? 'Phim xem sau được lưu cục bộ và tự đồng bộ Supabase khi bạn đăng nhập.'
+    : 'Phim yêu thích được lưu cục bộ và tự đồng bộ Supabase khi bạn đăng nhập.';
   if (countEl) countEl.textContent = list.length ? `${list.length} phim` : 'Chưa có phim nào';
   if (!el) return;
 
@@ -325,7 +340,7 @@ function renderHistory() {
   const el      = document.getElementById('history-list');
   const countEl = document.getElementById('history-count');
   document.querySelector('.page-header-title').textContent = 'Lịch Sử Xem';
-  document.querySelector('.history-note').textContent = 'Lịch sử xem, thời gian xem dở, xem sau, yêu thích, tài khoản và cài đặt được lưu trên thiết bị này. Khi đổi thiết bị, hãy xuất mọi dữ liệu ra rồi nhập lại trên thiết bị mới.';
+  document.querySelector('.history-note').textContent = 'Lịch sử xem, thời gian xem dở, xem sau và yêu thích được lưu cục bộ, sau đó tự đồng bộ Supabase khi bạn đăng nhập.';
   if (!el) return;
 
   if (countEl) countEl.textContent = list.length ? `${list.length} phim đã xem` : 'Chưa có phim nào';
